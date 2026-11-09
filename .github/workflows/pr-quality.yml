@@ -1,0 +1,26 @@
+name: PR Quality
+
+# pull_request_target so the title check can read PRs from forks; it never checks out PR code.
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+    branches: [main]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  title:
+    name: Conventional PR title
+    uses: akhiakl/ci-workflows/.github/workflows/conventional-pr-title.yml@v1.4.0
+    with:
+      types: |
+        feat
+        fix
+        perf
+        refactor
+        docs
+        test
+        build
+        ci
+        chore
