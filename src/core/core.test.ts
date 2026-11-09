@@ -120,7 +120,9 @@ describe('T13 noise golden', () => {
   it('stays in range and matches the frozen values', () => {
     const got = sample();
     got.forEach((v) => { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThan(0.9375); });
-    if (!existsSync(file)) writeFileSync(file, JSON.stringify(got)); // frozen at first green run
+    // Regenerate deliberately with UPDATE_GOLDEN=1; a missing golden is a failure, not a pass.
+    if (process.env.UPDATE_GOLDEN === '1') writeFileSync(file, JSON.stringify(got));
+    expect(existsSync(file), 'noise.json missing: run with UPDATE_GOLDEN=1').toBe(true);
     const want = JSON.parse(readFileSync(file, 'utf8')) as number[];
     got.forEach((v, i) => expect(v).toBeCloseTo(want[i], 12));
   });
@@ -155,6 +157,16 @@ describe('T15 resampler', () => {
   });
   it('125 Hz and 1 kHz streams land on the same grid (within one tick)', () => {
     expect(Math.abs(run(8).length - run(1).length)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('spine guards', () => {
+  it('spineTo and emitSpine ignore records allocated without a spine', () => {
+    const a = new ActiveArena();
+    const r = a.alloc();
+    expect(spineTo(a, r, 0, 0, 4)).toBe(false);
+    emitSpine(a, r);
+    expect(a.hdr[r * HDR_STRIDE + H.CMD_COUNT]).toBe(0);
   });
 });
 
