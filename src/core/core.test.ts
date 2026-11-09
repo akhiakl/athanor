@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { ActiveArena, CLOSE, H, HDR_STRIDE, LINE, MOVE, QUAD } from './arena';
+import { ActiveArena, CLOSE, F_CLOSED, H, HDR_STRIDE, LINE, MOVE, QUAD } from './arena';
 import { CAP, InputRing, PHASE_DOWN, PHASE_MOVE, PHASE_UP, STRIDE, metaPhase, packMeta } from './inputRing';
 import { Noise } from './noise';
 import { Prng, moduleRng } from './prng';
 import { Resampler } from './resampler';
-import { curveTo, emitSpine, lineTo, newShape, smooth3Tap, smoothKernel, spineTo } from './shape';
+import { close, curveTo, emitSpine, lineTo, newShape, smooth3Tap, smoothKernel, spineTo } from './shape';
 
 const dump = (a: ActiveArena, r: number) => {
   const b = r * HDR_STRIDE;
@@ -30,8 +30,9 @@ describe('T1 curveTo warmup and gating', () => {
     const { cmd, vtx } = dump(a, r);
     expect(cmd).toEqual([MOVE, LINE, LINE, LINE, LINE, QUAD, QUAD]);
     close4(vtx, [0, 0, 10, 0, 20, 0, 30, 0, 40, 0, 40, 0, 45, 0, 50, 0, 55, 2.5]);
-    expect(a.hdr[H.TOTAL_POINTS]).toBe(7);
-    expect([a.hdrF[H.LAST_X], a.hdrF[H.LAST_Y]]).toEqual([60, 5]);
+    const b = r * HDR_STRIDE;
+    expect(a.hdr[b + H.TOTAL_POINTS]).toBe(7);
+    expect([a.hdrF[b + H.LAST_X], a.hdrF[b + H.LAST_Y]]).toEqual([60, 5]);
   });
 
   it('keeps the bounding box incrementally', () => {
@@ -40,7 +41,18 @@ describe('T1 curveTo warmup and gating', () => {
     newShape(a, r, 5, 5);
     curveTo(a, r, -3, 20);
     const f = a.hdrF;
-    expect([f[H.BB_MIN_X], f[H.BB_MIN_Y], f[H.BB_MAX_X], f[H.BB_MAX_Y]]).toEqual([-3, 5, 5, 20]);
+    const b = r * HDR_STRIDE;
+    expect([f[b + H.BB_MIN_X], f[b + H.BB_MIN_Y], f[b + H.BB_MAX_X], f[b + H.BB_MAX_Y]]).toEqual([-3, 5, 5, 20]);
+  });
+
+  it('newShape on a reused record clears the closed flag', () => {
+    const a = new ActiveArena();
+    const r = a.alloc();
+    newShape(a, r, 0, 0);
+    close(a, r);
+    expect(a.hdr[r * HDR_STRIDE + H.FLAGS] & F_CLOSED).toBe(F_CLOSED);
+    newShape(a, r, 1, 1);
+    expect(a.hdr[r * HDR_STRIDE + H.FLAGS] & F_CLOSED).toBe(0);
   });
 });
 
@@ -108,7 +120,9 @@ describe('T13 noise golden', () => {
   it('stays in range and matches the frozen values', () => {
     const got = sample();
     got.forEach((v) => { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThan(0.9375); });
-    if (!existsSync(file)) writeFileSync(file, JSON.stringify(got)); // frozen at first green run
+    // Regenerate deliberately with UPDATE_GOLDEN=1; a missing golden is a failure, not a pass.
+    if (process.env.UPDATE_GOLDEN === '1') writeFileSync(file, JSON.stringify(got));
+    expect(existsSync(file), 'noise.json missing: run with UPDATE_GOLDEN=1').toBe(true);
     const want = JSON.parse(readFileSync(file, 'utf8')) as number[];
     got.forEach((v, i) => expect(v).toBeCloseTo(want[i], 12));
   });
@@ -135,8 +149,24 @@ describe('T15 resampler', () => {
     expect(ts[1]).toBeCloseTo(8.333, 2);
     expect(ts[11]).toBeCloseTo(91.667, 2);
   });
+  it('ignores moves after up until the next down', () => {
+    const rs = new Resampler(120);
+    expect(rs.push(0, 0, 0, 1, packMeta(0, PHASE_DOWN))).toBe(true);
+    expect(rs.push(1, 0, 20, 1, packMeta(0, PHASE_UP))).toBe(true);
+    expect(rs.push(2, 0, 40, 1, packMeta(0, PHASE_MOVE))).toBe(false);
+  });
   it('125 Hz and 1 kHz streams land on the same grid (within one tick)', () => {
     expect(Math.abs(run(8).length - run(1).length)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('spine guards', () => {
+  it('spineTo and emitSpine ignore records allocated without a spine', () => {
+    const a = new ActiveArena();
+    const r = a.alloc();
+    expect(spineTo(a, r, 0, 0, 4)).toBe(false);
+    emitSpine(a, r);
+    expect(a.hdr[r * HDR_STRIDE + H.CMD_COUNT]).toBe(0);
   });
 });
 

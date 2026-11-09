@@ -1,6 +1,6 @@
 // AlcShape construction primitives, spec 5.1. Hot path: no allocation per call.
 import {
-  ActiveArena, CLOSE, F_CLOSED, F_PEN_SHAPE, H, HDR_STRIDE, LINE, MOVE, QUAD, SPINE_CAP, VTX_CAP,
+  ActiveArena, CLOSE, F_CLOSED, F_PEN_SHAPE, H, HDR_STRIDE, LINE, MOVE, QUAD, SPINE_CAP,
 } from './arena';
 
 export const START_POINTS = 5;
@@ -38,13 +38,15 @@ function accept(a: ActiveArena, b: number, x: number, y: number): void {
 
 /** True when a record can take `pairs` more vertices; false means the caller must split-commit (7.2). */
 export function hasRoom(a: ActiveArena, r: number, pairs: number): boolean {
-  return a.hdr[r * HDR_STRIDE + H.VTX_COUNT] + pairs <= VTX_CAP;
+  const b = r * HDR_STRIDE;
+  return a.hdr[b + H.VTX_COUNT] + pairs <= a.hdr[b + H.VTX_CAP];
 }
 
 export function newShape(a: ActiveArena, r: number, x: number, y: number, rgba = 0, lineWidth = 0): void {
   const b = r * HDR_STRIDE;
   a.hdr[b + H.VTX_COUNT] = 0;
   a.hdr[b + H.CMD_COUNT] = 0;
+  a.hdr[b + H.FLAGS] &= ~(F_CLOSED | F_PEN_SHAPE); // per-geometry bits must not leak from a reused record
   a.hdr[b + H.RGBA] = rgba;
   a.hdrF[b + H.LINE_WIDTH] = lineWidth < 0 ? 0 : lineWidth;
   pushCmd(a, b, MOVE);
@@ -108,8 +110,8 @@ export function rightAngle(
 export function spineTo(a: ActiveArena, r: number, x: number, y: number, w: number): boolean {
   const b = r * HDR_STRIDE;
   const n = a.hdr[b + H.SPINE_COUNT];
-  if (n >= SPINE_CAP) return false;
   const base = a.hdr[b + H.SPINE_OFF];
+  if (base < 0 || n >= SPINE_CAP) return false; // base < 0: record allocated without a spine
   const s = a.spine;
   if (n > 0) {
     const p = 4 * (base + n - 1);
@@ -132,8 +134,8 @@ export function spineTo(a: ActiveArena, r: number, x: number, y: number, w: numb
 export function emitSpine(a: ActiveArena, r: number, smoothing = true): void {
   const b = r * HDR_STRIDE;
   const n = a.hdr[b + H.SPINE_COUNT];
-  if (n === 0) return;
   const base = a.hdr[b + H.SPINE_OFF];
+  if (base < 0 || n === 0) return;
   newShape(a, r, a.spine[4 * base], a.spine[4 * base + 1], a.hdr[b + H.RGBA], a.hdrF[b + H.LINE_WIDTH]);
   for (let i = 1; i < n; i++) curveTo(a, r, a.edgeL[2 * (base + i)], a.edgeL[2 * (base + i) + 1], smoothing);
   for (let k = n - 1; k >= 1; k--) curveTo(a, r, a.edgeR[2 * (base + k)], a.edgeR[2 * (base + k) + 1], smoothing);
