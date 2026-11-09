@@ -3,7 +3,7 @@
 Status: Implementation-ready architecture blueprint, v1.0
 Source analyzed: `karldd/Alchemy` (Java 1.5, Swing/Java2D, JPen, JPF, Batik, iText, Beads), 91 Java files, ~25.6k LOC, `src/org/alchemy/{core,create,affect}`, `modules/*/plugin.xml`, `shapes/*`.
 Method: clean-room static analysis. Legacy behavior is described as observable contracts; no Java syntax or AWT/Swing idioms are carried over.
-Target: purely client-side TypeScript web app. No backend. Network used only to load the static bundle; every feature works offline once loaded.
+Target: purely client-side, local-first TypeScript web app (installable PWA). No backend, no accounts, no server rendering. Multi-route app shell (home file browser, editor, settings) around the Alchemy canvas engine. Files are multi-page documents stored in the browser. Network used only to load and update the static app; every feature works offline once installed. App shell, storage, pages, undo and PWA are specified in section 8.
 
 Notation:
 - `p = (x, y)` CSS-pixel canvas coordinates unless suffixed `_dev` (device pixels = CSS px x `dpr`).
@@ -21,7 +21,7 @@ These facts were verified in source and override assumptions in the original bri
 
 | # | Finding | Source | Spec consequence |
 |---|---|---|---|
-| F1 | Undo exists but is optional: pref `Undo Depth` 0/1/2 (default 0 = off), stroke groups via `startUndoGroup/finishUndoGroup`. | `AlcCanvas`, `AlcPreferences` | [DIVERGENCE] MVP ships no undo, matching the default-off ethos. Data model keeps stroke-group boundaries so undo can be added later at zero cost. |
+| F1 | Undo exists but is optional: pref `Undo Depth` 0/1/2 (default 0 = off), stroke groups via `startUndoGroup/finishUndoGroup`. | `AlcCanvas`, `AlcPreferences` | Undo/redo is ON in the web app (product decision), implemented as an operation history over the committed log (8.5). Legacy default-off is not kept. |
 | F2 | An eraser exists only as a second color slot (slot 1, default white) auto-selected when the tablet reports the eraser end. There is no pixel erase. | `AlcCanvas` pen kind listener | Pen eraser end (`buttons & 32`) selects color slot 1. No erase tool. |
 | F3 | `AlcMicrophone` has no pitch detection. Level = mean absolute 16-bit sample / 100 (range 0 to 327.68). Not RMS. | `AlcMicrophone.getMicLevel` | Web audio worklet computes legacy `meanAbs/100` for parity, plus RMS for new modules. |
 | F4 | Pitch exists only in `PitchShapes` (Beads lib): frame 2048, hop 777, FFT, power spectrum, 10 spectral peaks, energy-weighted mean frequency, gate `peak0.energy > 1000`. | `PitchShapes` | Specified in 4.1.4 on `AnalyserNode`. |
@@ -33,7 +33,7 @@ These facts were verified in source and override assumptions in the original bri
 | F10 | "Switch Vector/Bitmap" writes temp PDF/SVG/PNG and launches a native app (`open -a`, absolute exe path). | `AlcMenuBar`, `AlcUtil` | Blocked by browser sandbox. Replaced (7.4). |
 | F11 | `commitShapes()` flattens by re-rendering old buffer + active shapes into a new image, then appends to the retained list. Guides are baked into the buffer when visible. | `AlcCanvas.commitShapes` | [LEGACY BUG] guides never baked. Commit is incremental raster, not full re-render. |
 | F12 | Affect modules that act on committed shapes (Random, Smooth, MicExpand, Repeat source, Limit) trigger full `redraw(true)` = O(N) re-render of all shapes. | `affect/*` | Replaced by dirty-tile replay (2.6). |
-| F13 | Session recording is a Swing timer that saves a page only if the canvas changed, appending to a multi-page PDF on disk. | `AlcSession` | In-memory multi-page PDF built in a worker, downloaded on demand. |
+| F13 | Session recording is a Swing timer that saves a page only if the canvas changed, appending to a multi-page PDF on disk. | `AlcSession` | Each snapshot becomes a new page in the current document (8.4); PDF is an export of the pages. |
 
 ---
 
@@ -45,7 +45,7 @@ Alchemy is a serendipitous visual brainstorming instrument, not an illustration 
 
 | Principle | Contract |
 |---|---|
-| Forward-only marks | No undo (F1), no selection, no erase, no layers panel, no object editing UI. Shapes, once committed, are mutated only by generative affect modules (Random, Smooth, MicExpand, Repeat, Limit), never by direct manipulation. |
+| Generative, not editorial | No selection, no erase, no layers panel, no object editing UI. Shapes, once committed, are mutated only by generative affect modules (Random, Smooth, MicExpand, Repeat, Limit), never by direct manipulation. Undo/redo exists (8.5) as a safety net, not as an editing tool. |
 | Rapid generation | Shapes appear on the first pointer sample. Zero modal dialogs during drawing. Every control is reachable in one keystroke. |
 | Blind drawing | Blindness suppresses active-layer rendering. The artist sees only committed results on reveal. |
 | Timed resets | Session recording snapshots the canvas every N ms into a page; optional auto-clear after each snapshot forces new beginnings. |
@@ -119,6 +119,12 @@ First sample of a stroke: `pSyn_0 = 0.6` (fast strokes thin, slow strokes thick,
 | `KeyS` | Mod | Save session page (to in-memory PDF) | MOD+S | `preventDefault` works in all engines |
 | `KeyD` | Mod | Save page and clear | MOD+D | `preventDefault` (bookmark) works in Chromium/Firefox; Safari: fallback `Alt+KeyD` |
 | `KeyR` | Alt | Toggle session recording | MOD+R | Remapped: `Ctrl+R` reload cannot be safely stolen |
+| `KeyZ` | Mod | Undo | MOD+Z | 8.5 |
+| `KeyZ` | Mod+Shift | Redo | none | also `Mod+KeyY` on Windows/Linux |
+| `PageDown` / `PageUp` | - | Next / previous page | none | 8.4 |
+| `KeyN` | Alt | New page | none | 8.4 |
+| `KeyK` | Mod | Command palette | none | 8.3 |
+| `Backslash` | Mod | Toggle pages panel | none | 8.3 |
 | `ArrowRight` / `ArrowLeft` | Mod | Next / previous page of loaded session PDF | same | |
 | `KeyL` | Alt | Load background image | MOD+L | Remapped: address bar |
 | `KeyP` | Mod | Print (PNG of canvas into print iframe) | MOD+P | |
@@ -137,16 +143,19 @@ Recognizer runs on non-primary touches only; primary touch always draws. Thresho
 
 | Gesture | Action |
 |---|---|
-| 2-finger tap | Toggle HUD |
-| 3-finger tap | Toggle Blindness (or reveal if active) |
-| 2-finger long-press 600 ms | Clear canvas. A 600 ms radial progress ring is shown first; lifting a finger before it completes cancels (no undo after firing, forward-only) |
-| 4-finger tap | Toggle style stroke/fill |
+| 2-finger tap | Undo (tablet convention) |
+| 3-finger tap | Redo |
+| 4-finger tap | Toggle toolbar expanded/collapsed |
+| 2-finger long-press 600 ms | Clear page (undoable). A 600 ms radial progress ring is shown first; lifting a finger cancels |
+| Blindness, style, module switching | Via the floating toolbar (no gesture) |
 | Edge swipe down from top 24 px | Show HUD |
 | Primary touch starting a stroke cancels any pending gesture | |
 
 When a second touch lands mid-stroke, the active stroke is committed (not discarded) and the gesture recognizer takes over.
 
-### 1.4 Distraction-Free Viewport and Proximity HUD
+### 1.4 Distraction-Free Viewport, Floating Toolbar and Proximity HUD
+
+Product decision: the editor opens in **focus mode**: full-viewport canvas plus a small always-present floating toolbar (8.3.2). The full HUD (sub-toolbars, swatches) described below is summoned from the floating toolbar, by key, or by top-edge proximity. The docked mode remains as a pref.
 
 Legacy `AlcToolBar.toggleToolBar(y)`: show when `y < 10`, hide when `y > totalHeight + 5` (immediately, or after 1000 ms if a popup is open), canvas events disabled while toolbar is shown, any canvas click below hides it. `AlcSimpleToolBar` is a permanent 150 px left sidebar.
 
@@ -193,7 +202,7 @@ Rules:
 | `affectShapes` | `ActiveArena.affect` | main | Until commit |
 | `guideShapes` | `GuideList` (small JS array, max 8 entries, preallocated) | main | Module-controlled |
 | `shapes` (committed) | `CommittedLog` (3.2.3) + `SpatialGrid` (2.6) | render worker | Until clear, Limit removal, or baking (2.7) |
-| `shapeGroups` (undo) | `strokeGroupStart` field in log header | render worker | Reserved, unused in MVP |
+| `shapeGroups` (undo) | `HistoryLog` (8.5) | render worker | Per page, bounded by undo budget |
 
 ### 2.3 Frame Pipeline (main thread)
 
@@ -294,7 +303,7 @@ Vector retention exists for SVG/PDF export and tile replay. Unbounded sessions n
 
 | Threshold | Action |
 |---|---|
-| Committed vertices > 4,000,000 or shapes > 50,000 or estimated worker heap > 64 MB | Bake: oldest 50% of shapes by log index (excluding any shape referenced by an active COMMITTED-domain module) are rasterized into `bakedBase` (an OffscreenCanvas same size as committed), removed from the log, their arena space reclaimed by compaction |
+| Committed vertices > 4,000,000 or shapes > 50,000 or estimated worker heap > 64 MB | Bake: oldest 50% of shapes by log index that are older than the undo horizon (8.5; excluding any shape referenced by an active COMMITTED-domain module) are rasterized into `bakedBase` (an OffscreenCanvas same size as committed), removed from the log, their arena space reclaimed by compaction |
 | Export after baking | SVG embeds `bakedBase` as `<image href="data:image/png;base64,...">` at z-bottom; PDF embeds it as an image XObject. HUD export dialog flags "partially rasterized" |
 | Clear | Drops log, grid, baked base |
 
@@ -478,7 +487,7 @@ Chunked so growth never copies large buffers:
 | `hdr` | `Int32Array` growable by doubling (max 50,000 x 24 x 4 = 4.8 MB) | | same layout as 3.2.2 plus slot 2 reused as `chunkIndex` |
 | `alive` | `Uint8Array` | parallel to hdr | tombstones |
 | `path2d[]` | `Array<Path2D \| null>` | | LRU cache (2.6) |
-| `strokeGroup` | `Int32Array` | parallel | stroke group id (reserved for undo) |
+| `strokeGroup` | `Int32Array` | parallel | history op id that created the shape (8.5) |
 
 Records never straddle chunks (a record that does not fit starts the next chunk). Compaction (after baking or > 25% tombstones) runs as a background job copying live records into fresh chunks, 2 ms slices.
 
@@ -535,7 +544,7 @@ Replaces `java.util.prefs`. Single JSON document per namespace, written debounce
 | `keys` | {} overrides `{actionId: {code, mods}}` | shortcut prefs |
 | `locale` | `system` | `Locale` |
 
-Dropped prefs: `Session Path`, `Export Directory`, `Shapes Path`, `Switch * Application`, `Palette/Canvas Location`, `Canvas Size`, `Transparent Fullscreen`, `Undo Depth`, `Smoothing` (2.4).
+Dropped prefs: `Session Path`, `Export Directory`, `Shapes Path`, `Switch * Application`, `Palette/Canvas Location`, `Canvas Size`, `Transparent Fullscreen`, `Smoothing` (2.4). `Undo Depth` becomes `history.maxSteps` (8.5).
 
 In-memory only (never persisted, cleared on reload): loaded custom SVG stamps (PullShapes), trace reference image and derived maps (TraceShapes), Evolve population, session PDF pages, loaded session PDF for draw-over. Optional post-MVP: IndexedDB for stamps (`alchemy-assets` store), off by default.
 
@@ -1368,6 +1377,8 @@ meanAbs = 750, legacyLvl = 7.5. MicShapes fatten micLevel = 15, volume 1.0 -> w 
 
 ### 7.3 Bundle and Load Plan (offline after load)
 
+Note: route-level budgets and the Service Worker are now defined in 8.7 and 8.8, which take precedence over this subsection.
+
 | Chunk | Contents | gz budget | Loaded |
 |---|---|---|---|
 | `app.js` (inline in HTML) | engine core, input, active renderer, core modules (Shapes, Speed, Pressure, Scrawl, Detach, Mirror, Gradient, Displace, ColorSwitcher, Blindness, Limit), HUD (Preact + signals), prefs | 30 KB | initial |
@@ -1381,7 +1392,7 @@ meanAbs = 750, legacyLvl = 7.5. MicShapes fatten micLevel = 15, volume 1.0 -> w 
 
 Initial payload = app.js + app.css (single HTML document, one request) = ~33 KB gz, render worker counted separately but loaded concurrently (+9 KB = 42 KB; the 40 KB initial budget applies to the critical HTML; the worker is non-blocking and the main-thread fallback covers its absence for the first frames). If strict 40 KB including the worker is required, move Displace, ColorSwitcher and Limit to lazy chunks (-3 KB) and Preact to a hand-rolled 1 KB signal-to-DOM binder (-4 KB).
 
-Offline: after first load, no network access is ever made (no fonts, analytics, CDNs, or remote APIs). All chunks are prefetched with `<link rel="modulepreload">` during idle after first paint (`requestIdleCallback`), so selecting any module later works offline in the same tab. Hashed filenames, `Cache-Control: public, max-age=31536000, immutable`; HTML `no-cache`. Reloading while offline requires the HTTP cache (works in most browsers for immutable assets, not guaranteed). Post-MVP: a ~1 KB cache-first Service Worker makes reload-offline guaranteed (excluded from MVP per scope).
+Offline: after first load, no network access is ever made (no fonts, analytics, CDNs, or remote APIs). All chunks are prefetched with `<link rel="modulepreload">` during idle after first paint (`requestIdleCallback`), so selecting any module later works offline in the same tab. Hashed filenames, `Cache-Control: public, max-age=31536000, immutable`; HTML `no-cache`. Offline reload and install are guaranteed by the Service Worker (8.7), now in MVP scope.
 
 Thread topology summary:
 ```
@@ -1419,7 +1430,7 @@ Phase 2 (not MVP): WebGL2 committed renderer behind the same `RenderCore` interf
 | PullShapes scanning `./shapes` directories (recursive PDF discovery, MIME sniffing) | No directory access without user gesture; PDFs need a renderer | Bundled stamp manifest (build-time converted), drag-and-drop / file input SVG import; optional `showDirectoryPicker()` (Chromium) to import a folder of SVGs once per session |
 | Shapes from PDF files (PullShapes, Evolver "PDF...") | PDF vector extraction needs a full parser (> 100 KB) | SVG import; [DIVERGENCE] |
 | Loading a session PDF to draw over (multi-page navigation) | same | Load PNG/JPEG/SVG as background image; multi-page draw-over dropped |
-| Session recording appending to a PDF on disk every interval | No silent file writes | In-memory page accumulation; manual "Download session PDF"; optional File System Access `showSaveFilePicker` + `createWritable` (Chromium) for live append after one user grant |
+| Session recording appending to a PDF on disk every interval | No silent file writes | Snapshot pages saved into the local document (8.4); "Export pages as PDF"; optional File System Access `showSaveFilePicker` (Chromium) for live PDF append after one user grant |
 | Session directory, export directory prefs | no paths | browser download location |
 | TraceShapes random Flickr image (hard-coded API key, obsolete endpoints) | network dependency, dead API, key exposure | Local file/drop/paste, webcam |
 | Swatch ColourLovers palette fetch | network | bundled palettes |
@@ -1481,6 +1492,297 @@ Phase 2 (not MVP): WebGL2 committed renderer behind the same `RenderCore` interf
 
 ---
 
+## 8. Application Shell, Local-First Documents, Undo & PWA
+
+This section supersedes the "single-page drawing tool" assumptions elsewhere in the spec wherever they conflict.
+
+### 8.1 Product Decisions
+
+| Decision | Choice |
+|---|---|
+| Accounts / backend | None. Local-first: all data lives in the browser (8.6). |
+| Server rendering | None. Static SPA. No SEO surface needed inside the app. |
+| Document model | File = ordered list of fixed-size pages; each page is one Alchemy canvas. |
+| Editor default | Focus mode: full-viewport page + small floating toolbar (8.3.2). |
+| Undo / redo | Yes, per page, operation history (8.5). |
+| Installable / offline | Yes: PWA with Service Worker, installable, offline reload guaranteed (8.7). |
+| UI library | Preact + signals (React API, knowledge transfers directly) (8.2). |
+
+### 8.2 Final Stack
+
+| Concern | Choice | Notes |
+|---|---|---|
+| Language | TypeScript strict (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`) | |
+| Build | Vite (ES2022 target, module workers) | |
+| UI | Preact 10 + `@preact/signals` | Same JSX, hooks, components as React. Signals let high-frequency readouts (mic meter, pitch, page counter) update single DOM text nodes without re-rendering component trees. `preact/compat` alias available if a React-only library is ever needed. Rationale over React: ~4 KB vs ~45 KB on the editor critical path. |
+| Routing | `preact-iso` (lazy routes, ~1.5 KB) | |
+| Styling | Plain CSS + Vite CSS Modules, design tokens as custom properties | Zero runtime. |
+| Components | No component library. Native `<dialog>`, `popover`, `<input type=range>`, roving-tabindex toolbars | Accessibility from native semantics. |
+| Icons | Inline SVG sprite, tree-shaken subset (Lucide, MIT) | |
+| Storage | IndexedDB via `idb` (~1.2 KB) + OPFS (Origin Private File System) | 8.6 |
+| PWA | `vite-plugin-pwa` (Workbox `injectManifest` with a small custom SW) | 8.7 |
+| Engine | `packages/engine`: framework-free TS (sections 2 to 5) | Lint rule forbids UI imports in engine. |
+| Tests | Vitest (geometry, storage codecs), Playwright (render golden, perf, PWA offline), `size-limit` | |
+| Lint / format | ESLint + typescript-eslint, Prettier | |
+| Repo | pnpm workspace monorepo | |
+
+Repository layout:
+```
+apps/athanor/            Vite app: routes, shell, PWA, UI components
+  src/routes/home/       file browser
+  src/routes/editor/     editor shell, floating toolbar, panels, dialogs
+  src/routes/settings/
+  src/sw.ts              Service Worker
+packages/engine/         canvases, input, modules, workers (render, compute), audio worklet, export
+packages/doc/            document model, page log codec, history ops, .athanor (de)serializer, storage adapters
+packages/ui/             shared primitives (Button, Slider, Popover, Toolbar, Dialog, Icon)
+tools/stamps/            build-time converter for legacy PullShapes PDFs to stamps.json (not shipped)
+```
+
+### 8.3 Routes and Information Architecture
+
+| Route | Purpose | Loaded chunks |
+|---|---|---|
+| `/` | Home: file browser | shell + home |
+| `/f/:fileId` | Editor, opens last viewed page | shell + editor + engine |
+| `/f/:fileId/p/:pageId` | Editor deep link to a page | same |
+| `/settings` | Preferences, shortcuts editor, storage usage, backup/restore, about | shell + settings |
+| `/new?template=:id` | Create file then redirect to editor | shell |
+| Launch from OS file handler / share target | Imports then redirects | shell + doc |
+
+Hash-free history routing; the Service Worker serves `index.html` for all navigation requests (SPA fallback works offline).
+
+#### 8.3.1 Home
+
+- Header: app name, New file (primary), Import, Settings.
+- Grid of file cards: thumbnail (page 1, 256 px WebP), name (inline rename), page count, relative edit time; context menu: Open, Rename, Duplicate, Export `.athanor`, Delete (moves to Trash, purged after 30 days or manually).
+- Sort: last edited (default), name, created. Search by name (client-side filter).
+- Templates row: Blank, Blind warm-up (Blindness on), Mirror mandala (Mirror H+V), Trace session (TraceShapes), Timed session (recording every 60 s, auto-clear). A template = initial page size + module/affect preset + prefs overrides stored in the file.
+- Empty state: drop zone for `.athanor`, SVG, images.
+- Storage strip: used / quota (`navigator.storage.estimate()`), persistence status, "Back up all" (one `.zip` containing every `.athanor`), last backup date, reminder when more than 7 days of edits are unbacked.
+
+#### 8.3.2 Editor: Focus Mode and Floating Toolbar
+
+Layout: page canvas fitted to the viewport (letterboxed on a neutral surround), floating toolbar, everything else hidden.
+
+Floating toolbar (pill, 44 px tall, default bottom-center, draggable to any edge, position persisted):
+
+| Item | Behavior |
+|---|---|
+| Home | back to `/` (autosave already flushed) |
+| Create module | icon + short name; click opens module picker grid (with digit hints); click again toggles its settings flyout |
+| Affects | icon with active-count badge; opens checklist; each active affect's settings in the flyout |
+| Color | fg dot with alpha ring; click opens picker popover; long-press/right-click opens bg/eraser slot |
+| Width | compact stepper 1-75 (hidden when style is FILL) |
+| Style | stroke/fill toggle |
+| Undo / Redo | disabled state reflects history |
+| Page | "3 / 12" opens pages panel; arrows on hover |
+| Record | session recording toggle; red pulse when recording, shows countdown ring to next snapshot |
+| More (...) | Export, Copy, Clear page, Flip H/V, Background image, Fullscreen, Settings, Shortcuts, Command palette |
+
+Toolbar states:
+
+| State | Visual | Enter | Exit |
+|---|---|---|---|
+| `IDLE` | opacity 1 | default | stroke starts |
+| `DRAWING` | opacity 0.15, `pointer-events: none` | pointerdown on canvas | 300 ms after pointerup |
+| `NEAR` | opacity 1 during DRAWING if pointer is within 64 px of the pill while not drawing | proximity | leave |
+| `COLLAPSED` | 12 px dot at the pill position | `Mod+Period` or 4-finger tap | same, or click dot |
+| `FLYOUT` | module settings panel attached to pill (the legacy sub-toolbar sections, 6.2) | click module/affect | Esc, click outside, pointerdown on canvas |
+| `HIDDEN` | not rendered | Blindness strict mode pref, or `H` with Shift | same |
+
+Optional panels (all collapsed by default, toggles remembered per user):
+- Pages panel (left, `Mod+Backslash`): thumbnails, drag reorder, add, duplicate, delete, rename, page size badge.
+- Swatches panel (right): the legacy swatch bar features (6.1).
+- Legacy proximity HUD (1.4) remains available as pref `hud.mode = proximity` for users who want the original top-edge reveal; `docked` gives the legacy Simple toolbar rail.
+
+Command palette (`Mod+K`): fuzzy search over every action id (shortcut table 1.3.1, module selection, page ops, export). Lazy chunk.
+
+#### 8.3.3 Settings
+
+Sections: Drawing (line smoothing, synthetic pressure, input rate), Interface (toolbar mode, theme light/dark/system, reduced motion), Shortcuts (editor from 1.3.1), Session (interval, auto-clear, naming), Modules (enable/disable), Storage (usage, persist request, backup/restore, clear trash, reset app), About.
+
+### 8.4 Document and Page Model
+
+```
+File   { id: ULID, name, createdAt, updatedAt, pageOrder: PageId[], lastPageId, preset?: TemplatePreset, thumb?: Blob }
+Page   { id: ULID, fileId, name, width, height (CSS px, integers), background: 0xRRGGBB, createdAt,
+         origin: 'user' | 'session', logVersion, baseVersion, thumb?: Blob }
+```
+
+Page size:
+- New file: page size = current viewport CSS size rounded to integers (legacy canvas = window), or a preset: 1920x1080, 1080x1080, A4 landscape 1123x794, A4 portrait 794x1123, custom (max 8192 per side, area clamp per 7.2).
+- New page in a file: same size as the current page.
+- Pages are fixed-size. The editor view fits the page to the viewport (`scale = min(vw/w, vh/h)`, centered). This replaces the resize protocol of 6.4: window resize changes only the view transform; the committed raster is re-rasterized only on effective device scale change (`dpr * viewScale` crossing 1.25x or 0.8x of the current raster scale), using the progressive path of 2.6.
+- Mirror default axes = page center; all module coordinates are page coordinates.
+
+Page operations (document-level, undoable via document history 8.5.4): add, duplicate, delete, reorder, rename, resize (resize does not scale content; content outside is kept in the log and clipped).
+
+Session recording (replaces AlcSession PDF writing): on each interval tick, only if the page changed since the last snapshot:
+1. Render worker serializes the current page state (snapshot form, 8.6.2) and creates a new page with `origin: 'session'`, named by `session.filePrefix + dateFormat(now)`, inserted immediately after a "session block" marker of the current page (snapshots accumulate in order).
+2. If `session.autoClear`: clear the current page as one undoable history group.
+3. Record indicator pulses 500 ms (legacy parity).
+"Export pages as PDF" (export dialog) writes any selection of pages with the PDF writer of 3.4.3, one PDF page per document page.
+
+Active page residency: the render worker holds exactly one page fully loaded (log, grid, Path2D cache, history). Switching pages: flush pending writes, swap to the target page (decode snapshot, progressive raster with the stored thumbnail upscaled as placeholder), keep the previous page's final raster as an `ImageBitmap` for instant back-navigation. Adjacent page rasters (prev/next) are prerendered at thumbnail-plus resolution during idle.
+
+### 8.5 Undo / Redo
+
+#### 8.5.1 Model
+
+Per page, the render worker keeps a `HistoryLog` of groups; each group holds operations over the CommittedLog. Shapes are never physically deleted while referenced by history; removal is tombstoning (`alive[id] = 0`), so undo/redo of add/remove is O(ids) plus dirty-tile replay (2.6).
+
+| Op | Payload | Undo | Redo |
+|---|---|---|---|
+| `ADD` | `firstId, count, under` | tombstone ids | revive ids |
+| `REMOVE` | `ids: Uint32Array` (Limit, MicExpand removal) | revive | tombstone |
+| `MUTATE` | `id, preImage: ref to history arena (cmd + vtx copy, gradient), postImage ref (lazily captured on undo)` | swap in pre-image | swap in post-image |
+| `CLEAR` | `aliveSetRef` (packed bitset of alive ids at clear time) | revive set | tombstone set |
+| `FLIP` | `axis` | flip again (self-inverse) | flip |
+| `BACKGROUND` | `before, after` (color/image ref) | set before | set after |
+
+Every undo/redo produces `dirty = union of affected bboxes` and enqueues tile replay; FLIP and BACKGROUND trigger the full progressive re-raster.
+
+#### 8.5.2 Grouping Rules
+
+| Source | Group boundary |
+|---|---|
+| Pointer gesture | `pointerdown` opens a group; all commits (create + affect shapes, split-commits, Ribbon spacing commits, Pull/Evolve/Type stamps) and mutations until `pointerup` belong to it (legacy undo group semantics) |
+| Hover-driven affects (Random, Smooth, MicExpand, Repeat) | One group per "hover burst": opens on first mutation, closes after 500 ms without mutation, or on pointerdown, or on module deselect |
+| MicExpand continuous mutation | Same burst rule; pre-image captured only on first write to a shape within the group (copy-on-first-write), so a 10 s expansion costs one copy |
+| Keyboard/toolbar actions (clear, flip, background, TypeShapes generate, Shapes double-click commit) | One group each |
+| Session auto-clear | One group |
+| Limit removals triggered by a commit | Same group as that commit |
+
+Undo while a stroke is active: ignored. Undo while uncommitted active shapes exist without a stroke (InverseShapes hover shape, TypeShapes generated cluster, Repeat stamps): first undo discards the uncommitted active shapes (not in history), next undo pops history.
+
+New operation after undo clears the redo stack.
+
+#### 8.5.3 Budget and Interaction with Baking
+
+| Limit | Default | Pref |
+|---|---|---|
+| `history.maxSteps` | 200 groups per page | 20 to 1000 |
+| History arena (pre/post images) | 32 MB per page | 8 to 128 MB |
+
+Oldest groups are dropped when either limit is exceeded. The undo horizon is the oldest retained group. Consequences:
+- Shapes tombstoned by a dropped group are physically freed at the next compaction.
+- Shapes added by a dropped group become eligible for baking (2.7). Baking never touches shapes within the horizon, so baked content is never undoable (by construction).
+- History is in-memory only; it is not persisted across reloads or page switches beyond the resident cache [DIVERGENCE from Figma-like apps, chosen for simplicity]. Post-MVP: persist history ops in the page log (they are already written there as deltas, 8.6.2) and rebuild on load.
+
+#### 8.5.4 Document-Level History
+
+Page operations (add, delete, duplicate, reorder, rename, resize) are kept in a separate main-thread history (max 100 steps). Deleted pages are kept in storage with a `deletedAt` marker until the document history drops the step or the file is closed, then purged. `Mod+Z` applies to the page history when the canvas has focus and to the document history when the pages panel has focus.
+
+### 8.6 Local Storage Architecture
+
+#### 8.6.1 Layout
+
+IndexedDB database `athanor` (schema version migrated with `onupgradeneeded`):
+
+| Store | Key | Content |
+|---|---|---|
+| `files` | `id` | File record (8.4); index on `updatedAt`, `deletedAt` |
+| `pages` | `id` | Page record; index on `fileId` |
+| `assets` | `id` | `{fileId \| null, kind: 'stamp' \| 'image', name, mime, blob, meta}`; null fileId = shared library |
+| `kv` | key | schema version, last backup timestamp, migration flags |
+
+OPFS (`navigator.storage.getDirectory()`), written only from the render worker using `createSyncAccessHandle()` (synchronous, fast, worker-only):
+```
+/files/{fileId}/{pageId}.log     append-only page log (8.6.2)
+/files/{fileId}/{pageId}.snap    latest compacted snapshot
+/files/{fileId}/{pageId}.base    baked base raster (WebP blob)
+```
+Fallback when OPFS sync access is unavailable: the same byte segments stored as Blobs in an IndexedDB store `segments` keyed `[pageId, seq]`.
+
+Preferences stay in `localStorage` (3.3), synced across tabs via the `storage` event.
+
+#### 8.6.2 Page Log Format (binary, little-endian)
+
+```
+FileHeader   : magic "ATHL" | u16 version | u16 flags | u32 width | u32 height | u32 background
+Segment      : u32 byteLength | u32 crc32 | u8 kind | payload
+  kind 1 COMMIT   : CommitBatch payload (3.2.4) + u32 historyGroupId
+  kind 2 REMOVE   : u32 count | u32 ids[]
+  kind 3 MUTATE   : u32 id | record header | cmd bytes | vtx f32
+  kind 4 CLEAR    : u32 count | u32 ids[]  (or bitset)
+  kind 5 FLIP     : u8 axis
+  kind 6 REVIVE   : u32 count | u32 ids[]  (written by undo of REMOVE/CLEAR)
+  kind 7 BG       : u32 color | u32 assetId (0 = none)
+  kind 8 BAKE     : u32 count | u32 ids[] (removed into base raster)
+Snapshot (.snap): FileHeader + one COMMIT segment containing all alive shapes in log order + id remap table
+```
+
+Write path: the render worker appends a segment for every applied op (including undo/redo effects), buffered and flushed at most every 1000 ms and immediately on `visibilitychange` hidden / `pagehide`. Crash safety: on load, segments are read until the first length/CRC mismatch; the torn tail is discarded (at most ~1 s of work lost).
+Compaction: when `log bytes > 2 x snap bytes + 1 MB`, the worker writes a new `.snap` from the live state, then truncates the `.log`. Done in idle time slices.
+Load: read `.snap`, then replay `.log` segments, then progressive raster.
+
+#### 8.6.3 `.athanor` Export Format
+
+Store-only ZIP (no compression, CRC32; hand-written writer and reader, ~1.5 KB, worker-side) containing:
+```
+manifest.json    { "format": "athanor", "version": 1, "name", "createdAt", "pages": [{ "id", "name", "width", "height", "background", "origin" }], "preset" }
+pages/{id}.snap  snapshot form
+pages/{id}.base  optional baked raster
+pages/{id}.webp  thumbnail
+assets/{id}.{ext} stamps and reference images used by the file
+```
+Import validates magic, version, sizes and CRCs; unknown future versions are rejected with a message. "Back up all" = ZIP of `.athanor` files. Restore = import each, skipping files whose id already exists unless "overwrite" is chosen.
+
+#### 8.6.4 Durability and Multi-Tab
+
+- `navigator.storage.persist()` requested on first file creation (Chromium grants automatically for installed apps; Safari treats installed home-screen apps as persistent). Status shown in Settings.
+- Safari evicts all script-writable storage of non-installed sites after 7 days without user interaction: the home screen shows an install prompt and backup reminder when running in Safari outside an installed app.
+- Quota: `navigator.storage.estimate()`; writes that fail with `QuotaExceededError` pause autosave, show a blocking banner offering export and trash purge; drawing continues in memory.
+- Multi-tab: opening a file takes a Web Lock `athanor:file:{id}` (exclusive). A second tab opening the same file gets a read-only view with "Edit here" (requests the lock, the first tab flushes and switches to read-only). `BroadcastChannel('athanor')` propagates file list changes, renames and thumbnails to other tabs.
+
+### 8.7 PWA
+
+Web App Manifest:
+```
+name: "Athanor", short_name: "Athanor", start_url: "/", scope: "/", display: "standalone",
+display_override: ["window-controls-overlay", "standalone"], background_color / theme_color from tokens,
+icons: 192, 512, maskable 512, monochrome,
+file_handlers: [{ action: "/open", accept: { "application/x-athanor": [".athanor"] } }],   (Chromium desktop)
+share_target: { action: "/share", method: "POST", enctype: "multipart/form-data",
+                params: { files: [{ name: "files", accept: ["image/*", "image/svg+xml", ".athanor"] }] } },  (Android)
+launch_handler: { client_mode: "focus-existing" }
+```
+
+Service Worker:
+| Request | Strategy |
+|---|---|
+| Navigations | serve precached `index.html` (app shell) offline-first |
+| Hashed build assets (JS, CSS, worker, worklet, fonts, icons, `stamps.json`) | precached at install (full app, every lazy chunk, ~150 to 250 KB total), cache-first |
+| `/share` POST | read form files, stash in IndexedDB, redirect to `/?import=pending` |
+| Anything else | network only (there is nothing else) |
+
+Update flow: a new SW installs in the background and waits. The app shows "Update ready" in Home and in the editor's More menu; it activates (`skipWaiting` + reload) only on user action, and never while a stroke is active or a write is pending. A shell/engine schema mismatch (page log version) triggers a migration step before the editor opens.
+
+Install prompt: capture `beforeinstallprompt` (Chromium), show an install button in Home after the first saved file; on iOS show a one-time "Add to Home Screen" hint.
+
+Offline guarantee: after the first visit with the SW installed, cold start, reload, every route and every module work with no network.
+
+### 8.8 Loading and Bundle Budgets (supersedes 7.3 budgets)
+
+| Entry | Contents | Budget (gzip) |
+|---|---|---|
+| Shell | Preact, signals, router, tokens CSS, storage client, SW registration | 12 KB |
+| Home route | file grid, templates, import | 8 KB |
+| Editor route (critical) | engine core, floating toolbar, core modules, history client | 26 KB |
+| Render worker | as 7.3 + page log codec + history | 12 KB |
+| Lazy in editor | pages panel, command palette, export dialog, settings flyouts, swatch panel, other modules, PDF, compute worker, audio | per chunk 1 to 8 KB |
+
+Targets: Home cold load (shell + home) <= 20 KB JS+CSS gzip. Editor deep-link cold load (shell + editor) <= 40 KB, the original MVP budget, render worker loaded in parallel and not blocking first paint. All lazy chunks are precached by the SW and prefetched on idle, so selecting anything later costs no network and < 16 ms to evaluate.
+
+Startup sequence for `/f/:id`:
+1. HTML + shell (inline critical CSS) paint the editor surround and toolbar skeleton (< 1 frame after parse).
+2. In parallel: spawn render worker, transfer OffscreenCanvas, open IndexedDB, read page record, show stored thumbnail scaled as placeholder.
+3. Worker loads `.snap` + `.log` from OPFS, progressive raster replaces placeholder.
+4. Input is accepted as soon as the active layer exists (step 1), before the page finishes loading: strokes queue normally and commit after the page's log is loaded (commit batches wait in the pool).
+
+---
+
 ## Appendix A. Module Catalog
 
 | # | Id | Kind | Domain | Inputs | Lazy | Status |
@@ -1519,7 +1821,7 @@ Phase 2 (not MVP): WebGL2 committed renderer behind the same `RenderCore` interf
 2. Active renderer + main-thread RenderCore (fallback path first), commit protocol, Shapes/Speed/Pressure/Scrawl/Detach.
 3. Render worker transfer path, tile grid, Path2D cache, hit testing; Random, Smooth, Limit, Repeat.
 4. Mirror, Displace, Gradient, ColorSwitcher, Blindness; HUD (MainBar, SwatchBar, SubBar, ColorPicker); shortcuts; viewport lock.
-5. Exports: PNG, SVG, clipboard; session recording + PDF writer.
+5. Exports: PNG, SVG, clipboard; session recording + PDF writer. App shell, storage, pages, undo, PWA (section 8) in parallel from step 2.
 6. Audio: worklet, MicShapes, MicExpand, PitchShapes.
 7. Compute worker: Trace (image + webcam), Pull (manifest + SVG import), Type, Evolve; remaining creates (Median, Ribbon, Splatter, Inverse, X).
 8. Perf suite, size-limit gate, golden images, baking under stress.
