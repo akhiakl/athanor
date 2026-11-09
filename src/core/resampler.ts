@@ -1,5 +1,5 @@
 // Event-rate normalization for rateSensitive modules, spec 4.2.2, plus pressure smoothing 4.2.3.
-import { PHASE_MOVE, metaPhase } from './inputRing';
+import { PHASE_DOWN, PHASE_MOVE, metaPhase } from './inputRing';
 
 export class Resampler {
   private period: number;
@@ -18,7 +18,7 @@ export class Resampler {
     const o = this.out;
     if (metaPhase(meta) !== PHASE_MOVE) {
       // down/up/cancel always pass immediately; down restarts the grid
-      this.active = true;
+      this.active = metaPhase(meta) === PHASE_DOWN; // up/cancel end the stream
       this.tLast = t;
       this.pMax = 0;
       o[0] = x; o[1] = y; o[2] = t; o[3] = pressure;

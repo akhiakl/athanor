@@ -22,8 +22,8 @@ export class InputRing {
   }
 
   /**
-   * Overflow drops the oldest move sample, never down/up/cancel.
-   * shortcut: when full of phase samples the oldest is overwritten; unreachable at <= 4 kHz input, upgrade with the 64-slot phaseRing if it ever fires.
+   * Overflow: an incoming move is dropped when the oldest sample is a phase sample, otherwise the oldest move is dropped.
+   * shortcut: an incoming down/up/cancel on a full ring always overwrites the oldest sample, even if that is a phase sample; unreachable at <= 4 kHz input, upgrade with the 64-slot phaseRing if it ever fires.
    */
   write(x: number, y: number, t: number, pressure: number, tiltX: number, tiltY: number, buttons: number, meta: number): void {
     if (this.length === CAP) {

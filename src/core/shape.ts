@@ -45,6 +45,7 @@ export function newShape(a: ActiveArena, r: number, x: number, y: number, rgba =
   const b = r * HDR_STRIDE;
   a.hdr[b + H.VTX_COUNT] = 0;
   a.hdr[b + H.CMD_COUNT] = 0;
+  a.hdr[b + H.FLAGS] &= ~(F_CLOSED | F_PEN_SHAPE); // per-geometry bits must not leak from a reused record
   a.hdr[b + H.RGBA] = rgba;
   a.hdrF[b + H.LINE_WIDTH] = lineWidth < 0 ? 0 : lineWidth;
   pushCmd(a, b, MOVE);
