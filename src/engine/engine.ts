@@ -4,6 +4,7 @@ import { InputRing, META_HW_PRESSURE, PHASE_DOWN, PHASE_MOVE, STRIDE, KIND_MOUSE
 import { Prng, moduleRng } from '../core/prng';
 import { Resampler } from '../core/resampler';
 import * as S from '../core/shape';
+import { START_POINTS } from '../core/shape';
 import { SyntheticPressure } from './pressure';
 
 export const PEN_STYLUS = 1;
@@ -97,26 +98,39 @@ export class Engine {
     return this.alloc(true);
   }
 
-  /** Split-commit at a full record: commit everything, continue from the last point (7.2). */
+  /**
+   * Split-commit at a full record: commit everything, continue from the last emitted vertex (7.2).
+   * With smoothing, the emitted vertex is a midpoint and the raw last point is ahead of it; the new
+   * record keeps the raw point and an active smoothing state so the next QUAD continues the curve exactly.
+   */
   private split(r: number): number {
+    const a = this.arena;
     const b = r * HDR_STRIDE;
-    const lx = this.arena.hdrF[b + H.LAST_X];
-    const ly = this.arena.hdrF[b + H.LAST_Y];
+    const last = 2 * (a.hdr[b + H.VTX_OFF] + a.hdr[b + H.VTX_COUNT] - 1);
+    const ex = a.vtx[last];
+    const ey = a.vtx[last + 1];
+    const rawX = a.hdrF[b + H.LAST_X];
+    const rawY = a.hdrF[b + H.LAST_Y];
     this.commit();
-    return this.begin(lx, ly);
+    const nr = this.begin(ex, ey);
+    const nb = nr * HDR_STRIDE;
+    a.hdrF[nb + H.LAST_X] = rawX;
+    a.hdrF[nb + H.LAST_Y] = rawY;
+    a.hdr[nb + H.TOTAL_POINTS] = START_POINTS; // past the warmup: next curveTo emits a QUAD from the raw point
+    return nr;
   }
 
   curveTo(x: number, y: number): void {
     let r = this.current();
     if (r < 0) return;
-    if (!S.hasRoom(this.arena, r, 2)) r = this.split(r);
+    if (!S.hasRoom(this.arena, r, this.attrs.smoothing ? 2 : 1)) r = this.split(r);
     S.curveTo(this.arena, r, x, y, this.attrs.smoothing);
   }
 
   lineTo(x: number, y: number): void {
     let r = this.current();
     if (r < 0) return;
-    if (!S.hasRoom(this.arena, r, 2)) r = this.split(r);
+    if (!S.hasRoom(this.arena, r, 1)) r = this.split(r);
     S.lineTo(this.arena, r, x, y);
   }
 

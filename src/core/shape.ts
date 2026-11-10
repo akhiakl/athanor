@@ -58,7 +58,7 @@ export function newShape(a: ActiveArena, r: number, x: number, y: number, rgba =
 
 export function lineTo(a: ActiveArena, r: number, x: number, y: number): void {
   const b = r * HDR_STRIDE;
-  if (!hasRoom(a, r, 2)) return; // callers split-commit before this; never write past the record region
+  if (!hasRoom(a, r, 1)) return; // callers split-commit before this; never write past the record region
   const lx = a.hdrF[b + H.LAST_X];
   const ly = a.hdrF[b + H.LAST_Y];
   if (Math.fround(x) === lx && Math.fround(y) === ly) return;

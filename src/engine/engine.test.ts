@@ -95,9 +95,20 @@ describe('split-commit', () => {
     for (const c of sink.commits) expect(c.vtx.length).toBeLessThanOrEqual(2 * 4096);
     for (let i = 1; i < sink.commits.length; i++) {
       const prev = sink.commits[i - 1].vtx;
-      const lastX = prev[prev.length - 2];
-      expect(sink.commits[i].vtx[0]).toBeGreaterThanOrEqual(lastX - 10); // continues where the last piece ended
+      const cur = sink.commits[i];
+      // the continuation starts exactly at the last emitted vertex, and smoothing carries on with a QUAD
+      expect([cur.vtx[0], cur.vtx[1]]).toEqual([prev[prev.length - 2], prev[prev.length - 1]]);
+      expect(cur.cmd[1]).toBe(QUAD);
     }
+  });
+  it('a line-only stroke uses the full 4096-vertex record before splitting', () => {
+    const { e, sink } = setup(shapes());
+    e.attrs.smoothing = false;
+    const pts: [number, number, number][] = [];
+    for (let i = 0; i < 5000; i++) pts.push([i * 10, 0, i]);
+    pts.push([50000, 0, 5000]);
+    stroke(e, pts);
+    expect(sink.commits[0].vtx.length).toBe(2 * 4096);
   });
   it('a very long Pressure stroke splits with overlapping spine points and no overflow', () => {
     const { e, sink } = setup(pressureShapes({ amount: 4 }));
