@@ -48,6 +48,7 @@ export class Engine {
   private readonly resampler: Resampler;
   private readonly synth = new SyntheticPressure();
   private readonly carry = new Float32Array(6);
+  private spineDirty = false;
 
   constructor(readonly seed: number, private readonly sink: CommitSink, rateHz = 120) {
     this.resampler = new Resampler(rateHz);
@@ -138,7 +139,7 @@ export class Engine {
     let r = this.current();
     if (r < 0) return;
     if (S.spineFull(this.arena, r)) r = this.splitSpine(r);
-    S.spineTo(this.arena, r, x, y, w);
+    if (S.spineTo(this.arena, r, x, y, w)) this.spineDirty = true;
   }
 
   /** Spine records keep their last 2 spine points so the ribbon stays continuous across the split. */
@@ -161,11 +162,19 @@ export class Engine {
 
   // ---- commit (2.5) ----
 
-  commit(): void {
+  /** Replays spine outlines into cmd/vtx once per tick when a spine grew (5.1.4). */
+  flushSpines(): void {
+    if (!this.spineDirty) return;
+    this.spineDirty = false;
     for (let i = 0; i < this.createCount; i++) {
       const r = this.create[i];
       if (this.arena.hdr[r * HDR_STRIDE + H.SPINE_OFF] >= 0) S.emitSpine(this.arena, r, this.attrs.smoothing);
     }
+  }
+
+  commit(): void {
+    this.spineDirty = true; // spine records must be complete before leaving the arena
+    this.flushSpines();
     if (this.createCount > 0) this.sink.commit(this.arena, this.create, this.createCount);
     this.createCount = 0;
     this.arena.reset();
@@ -177,6 +186,7 @@ export class Engine {
   /** Drains the ring in order (2.3 step 1). */
   tick(ring: InputRing): void {
     while (ring.read(this.raw)) this.ingest(this.raw);
+    this.flushSpines();
   }
 
   private ingest(raw: Float32Array): void {

@@ -31,7 +31,7 @@ jobs:
       - run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
 
   verify:
-    name: Typecheck & Test (Node ${{ matrix.node-version }})
+    name: Typecheck, Test & Build (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -60,6 +60,13 @@ jobs:
           name: test
           run: pnpm run test
 
+      - uses: akhiakl/ci-workflows@v1.4.0
+        id: build
+        continue-on-error: true
+        with:
+          name: build
+          run: pnpm run build
+
       - name: Upload check results
         if: always() && github.event_name == 'pull_request'
         uses: actions/upload-artifact@v7
@@ -70,7 +77,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Fail if any check failed
-        if: steps.typecheck.outcome == 'failure' || steps.test.outcome == 'failure'
+        if: steps.typecheck.outcome == 'failure' || steps.test.outcome == 'failure' || steps.build.outcome == 'failure'
         run: exit 1
 
   quality-gate:
@@ -88,7 +95,7 @@ jobs:
           marker: '<!-- athanor-quality-gate -->'
           title: Quality Gate
           status: |
-            Typecheck & Test (Node 22 & 24)=${{ needs.verify.result }}
+            Typecheck, Test & Build (Node 22 & 24)=${{ needs.verify.result }}
 
       - name: Fail if verify failed
         if: needs.verify.result != 'success'
