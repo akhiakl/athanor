@@ -173,6 +173,16 @@ describe('spine guards', () => {
   });
 });
 
+describe('guards', () => {
+  it('Resampler rejects a non-positive or non-finite rate', () => {
+    for (const bad of [0, -1, NaN, Infinity]) expect(() => new Resampler(bad)).toThrow(RangeError);
+  });
+  it('packMeta masks fields so they cannot corrupt each other', () => {
+    expect(metaPhase(packMeta(7, 5))).toBe(1); // phase 5 -> 1, kind 7 -> 3 stays in its own bits
+    expect(packMeta(0, 0, 0xffff, 0x1ff) & ~0xff7f).toBe(0);
+  });
+});
+
 describe('InputRing', () => {
   it('round-trips and drops oldest moves on overflow, never phase samples', () => {
     const ring = new InputRing();
