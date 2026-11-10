@@ -173,6 +173,39 @@ describe('spine guards', () => {
   });
 });
 
+describe('capacity guards', () => {
+  it('a long spine stops before the outline can overflow the vertex region', () => {
+    const a = new ActiveArena();
+    const r = a.alloc(true);
+    const next = a.alloc();
+    let accepted = 0;
+    for (let i = 0; i < 5000; i++) if (spineTo(a, r, i * 10, 0, 4)) accepted++;
+    emitSpine(a, r);
+    expect(a.hdr[r * HDR_STRIDE + H.VTX_COUNT]).toBeLessThanOrEqual(a.hdr[r * HDR_STRIDE + H.VTX_CAP]);
+    expect(accepted).toBeLessThan(5000);
+    expect(a.hdr[next * HDR_STRIDE + H.VTX_COUNT]).toBe(0);
+  });
+  it('lineTo and curveTo refuse to write past a full record', () => {
+    const a = new ActiveArena();
+    const r = a.alloc();
+    newShape(a, r, 0, 0);
+    for (let i = 1; i < 10000; i++) lineTo(a, r, i * 10, 0);
+    expect(a.hdr[r * HDR_STRIDE + H.VTX_COUNT]).toBeLessThanOrEqual(4096);
+  });
+});
+
+describe('smoothKernel capacity', () => {
+  it('accepts exactly the largest input that fits (2n-2 = cap) and rejects one more', () => {
+    const a = new ActiveArena();
+    const r = a.alloc();
+    const mk = (n: number) => Float32Array.from({ length: 2 * n }, (_, i) => i);
+    smoothKernel(a, r, mk(2049), 2049); // 2*2049-2 = 4096
+    expect(a.hdr[r * HDR_STRIDE + H.VTX_COUNT]).toBe(4096);
+    smoothKernel(a, r, mk(2050), 2050); // 4098 > 4096: refused, record untouched
+    expect(a.hdr[r * HDR_STRIDE + H.VTX_COUNT]).toBe(4096);
+  });
+});
+
 describe('guards', () => {
   it('Resampler rejects a non-positive or non-finite rate', () => {
     for (const bad of [0, -1, NaN, Infinity]) expect(() => new Resampler(bad)).toThrow(RangeError);
