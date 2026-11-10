@@ -165,4 +165,6 @@ export function smoothKernel(a: ActiveArena, r: number, pts: Float32Array, n: nu
   }
   pushCmd(a, b, LINE);
   pushVtx(a, b, pts[2 * n - 2], pts[2 * n - 1]);
+  accept(a, b, pts[2 * n - 2], pts[2 * n - 1]); // keep lineTo/curveTo gating and last point consistent
+  a.hdr[b + H.TOTAL_POINTS] = n;
 }

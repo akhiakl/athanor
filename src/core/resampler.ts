@@ -10,6 +10,7 @@ export class Resampler {
   readonly out = new Float32Array(4);
 
   constructor(rateHz = 120) {
+    if (!(rateHz > 0) || !Number.isFinite(rateHz)) throw new RangeError(`rateHz must be a positive finite number, got ${rateHz}`);
     this.period = 1000 / rateHz;
   }
 

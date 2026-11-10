@@ -77,6 +77,9 @@ describe('T6 smooth kernel', () => {
     const { cmd, vtx } = dump(a, r);
     expect(cmd).toEqual([MOVE, QUAD, LINE]);
     close4(vtx, [0, 0, 0, 0, 5, 2.5, 20, 0]);
+    const b = r * HDR_STRIDE;
+    expect(a.hdr[b + H.TOTAL_POINTS]).toBe(3);
+    expect([a.hdrF[b + H.LAST_X], a.hdrF[b + H.LAST_Y]]).toEqual([20, 0]);
   });
 
   it('3-tap pass is sequential with fixed endpoints', () => {
@@ -167,6 +170,16 @@ describe('spine guards', () => {
     expect(spineTo(a, r, 0, 0, 4)).toBe(false);
     emitSpine(a, r);
     expect(a.hdr[r * HDR_STRIDE + H.CMD_COUNT]).toBe(0);
+  });
+});
+
+describe('guards', () => {
+  it('Resampler rejects a non-positive or non-finite rate', () => {
+    for (const bad of [0, -1, NaN, Infinity]) expect(() => new Resampler(bad)).toThrow(RangeError);
+  });
+  it('packMeta masks fields so they cannot corrupt each other', () => {
+    expect(metaPhase(packMeta(7, 5))).toBe(1); // phase 5 -> 1, kind 7 -> 3 stays in its own bits
+    expect(packMeta(0, 0, 0xffff, 0x1ff) & ~0xff7f).toBe(0);
   });
 });
 

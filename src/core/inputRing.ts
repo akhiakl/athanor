@@ -8,7 +8,7 @@ export const PHASE_MOVE = 0, PHASE_DOWN = 1, PHASE_UP = 2, PHASE_CANCEL = 3;
 export const META_COALESCED = 1 << 4, META_PREDICTED = 1 << 5, META_HW_PRESSURE = 1 << 6;
 
 export const packMeta = (kind: number, phase: number, flags = 0, pointerSlot = 0): number =>
-  kind | (phase << 2) | flags | (pointerSlot << 8);
+  (kind & 3) | ((phase & 3) << 2) | (flags & 0x70) | ((pointerSlot & 0xff) << 8);
 export const metaPhase = (meta: number): number => (meta >> 2) & 3;
 export const metaKind = (meta: number): number => meta & 3;
 
