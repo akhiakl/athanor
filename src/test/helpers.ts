@@ -41,6 +41,6 @@ export function stroke(e: Engine, pts: Pt[], opts: { pen?: boolean } = {}): void
 export const close4 = (got: number[], want: number[], digits = 4): void => {
   if (got.length !== want.length) throw new Error(`length ${got.length} != ${want.length}: ${got}`);
   want.forEach((w, i) => {
-    if (Math.abs(got[i] - w) > 10 ** -digits) throw new Error(`[${i}] ${got[i]} != ${w}\n${got}`);
+    if (!Number.isFinite(got[i]) || Math.abs(got[i] - w) > 10 ** -digits) throw new Error(`[${i}] ${got[i]} != ${w}\n${got}`);
   });
 };

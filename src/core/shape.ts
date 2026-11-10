@@ -163,7 +163,7 @@ export function smooth3Tap(pts: Float32Array, n: number): void {
 /** Smooth-affect kernel: writes M, n-2 QUADs and a final LINE into record r. */
 export function smoothKernel(a: ActiveArena, r: number, pts: Float32Array, n: number): void {
   const b = r * HDR_STRIDE;
-  if (n < 2 || 2 * n > a.hdr[b + H.VTX_CAP]) return;
+  if (n < 2 || 2 * n - 2 > a.hdr[b + H.VTX_CAP]) return; // writes MOVE + 2 per QUAD + final LINE = 2n - 2 vertices
   newShape(a, r, pts[0], pts[1], a.hdr[b + H.RGBA], a.hdrF[b + H.LINE_WIDTH]);
   for (let i = 1; i < n - 1; i++) {
     const sx = 0.25 * pts[2 * i - 2] + 0.5 * pts[2 * i] + 0.25 * pts[2 * i + 2];

@@ -194,6 +194,18 @@ describe('capacity guards', () => {
   });
 });
 
+describe('smoothKernel capacity', () => {
+  it('accepts exactly the largest input that fits (2n-2 = cap) and rejects one more', () => {
+    const a = new ActiveArena();
+    const r = a.alloc();
+    const mk = (n: number) => Float32Array.from({ length: 2 * n }, (_, i) => i);
+    smoothKernel(a, r, mk(2049), 2049); // 2*2049-2 = 4096
+    expect(a.hdr[r * HDR_STRIDE + H.VTX_COUNT]).toBe(4096);
+    smoothKernel(a, r, mk(2050), 2050); // 4098 > 4096: refused, record untouched
+    expect(a.hdr[r * HDR_STRIDE + H.VTX_COUNT]).toBe(4096);
+  });
+});
+
 describe('guards', () => {
   it('Resampler rejects a non-positive or non-finite rate', () => {
     for (const bad of [0, -1, NaN, Infinity]) expect(() => new Resampler(bad)).toThrow(RangeError);
