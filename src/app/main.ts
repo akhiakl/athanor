@@ -21,12 +21,21 @@ const ring = new InputRing();
 const active = new ActiveRenderer();
 const epoch = performance.now();
 let down = false;
+let originX = 0; // cached stage offset: reading layout per coalesced event would force reflow in a hot loop
+let originY = 0;
+
+function measure(): void {
+  const r = stage.getBoundingClientRect();
+  originX = r.left;
+  originY = r.top;
+}
 
 engine.select(createModules[0].make());
 
 function resize(): void {
   const w = stage.clientWidth;
   const h = stage.clientHeight;
+  measure();
   // Cap backing area at 16.7 Mpx (iOS Safari limit), spec 7.2.
   const dpr = Math.min(window.devicePixelRatio || 1, Math.sqrt(16.7e6 / (w * h)));
   for (const [c, ctx] of [[committedCanvas, committedCtx], [activeCanvas, activeCtx]] as const) {
@@ -53,17 +62,17 @@ function frame(): void {
 }
 
 function write(ev: PointerEvent, phase: number, extra = 0): void {
-  const rect = stage.getBoundingClientRect();
   const kind = ev.pointerType === 'pen' ? KIND_PEN : ev.pointerType === 'touch' ? KIND_TOUCH : KIND_MOUSE;
   // Hardware pressure: pens always (even a reported 0 at pointerdown); touch only when it reports something other than the 0.5 default.
   const hw = kind === KIND_PEN || (kind === KIND_TOUCH && ev.pressure > 0 && ev.pressure !== 0.5);
-  ring.write(ev.clientX - rect.left, ev.clientY - rect.top, ev.timeStamp - epoch, ev.pressure, ev.tiltX, ev.tiltY, ev.buttons,
+  ring.write(ev.clientX - originX, ev.clientY - originY, ev.timeStamp - epoch, ev.pressure, ev.tiltX, ev.tiltY, ev.buttons,
     packMeta(kind, phase, extra | (hw ? META_HW_PRESSURE : 0)));
 }
 
 stage.addEventListener('pointerdown', (ev) => {
   if (!ev.isPrimary || ev.button !== 0) return;
   stage.setPointerCapture(ev.pointerId);
+  measure(); // once per stroke, covers scroll/layout shifts
   down = true;
   write(ev, PHASE_DOWN);
   request();
