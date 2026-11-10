@@ -77,6 +77,9 @@ describe('T6 smooth kernel', () => {
     const { cmd, vtx } = dump(a, r);
     expect(cmd).toEqual([MOVE, QUAD, LINE]);
     close4(vtx, [0, 0, 0, 0, 5, 2.5, 20, 0]);
+    const b = r * HDR_STRIDE;
+    expect(a.hdr[b + H.TOTAL_POINTS]).toBe(3);
+    expect([a.hdrF[b + H.LAST_X], a.hdrF[b + H.LAST_Y]]).toEqual([20, 0]);
   });
 
   it('3-tap pass is sequential with fixed endpoints', () => {
