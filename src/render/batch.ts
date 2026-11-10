@@ -1,7 +1,7 @@
 // CommitBatch: one ArrayBuffer of [u32 count][header(24 x i32) | cmd bytes padded to 4 | vtx f32 pairs]..., spec 3.2.4.
 import { H, HDR_STRIDE, type ActiveArena } from '../core/arena';
 
-const pad4 = (n: number): number => (n + 3) & ~3;
+const pad4 = (n: number): number => Math.ceil(n / 4) * 4; // not bitwise: a corrupt count near 2^31 must not wrap negative
 
 export interface Shape {
   hdr: Int32Array;

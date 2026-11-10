@@ -60,6 +60,11 @@ describe('unpackBatch validation', () => {
     const lying = buf.slice(0);
     new Uint32Array(lying, 0, 1)[0] = 5; // claims 5 records
     expect(() => unpackBatch(lying)).toThrow(/corrupt CommitBatch/);
+    for (const huge of [0x7fffffff, 0x7ffffffe]) {
+      const big = buf.slice(0);
+      new Int32Array(big, 4, 24)[H.CMD_COUNT] = huge; // would wrap negative under a 32-bit pad
+      expect(() => unpackBatch(big)).toThrow(/corrupt CommitBatch/);
+    }
   });
 });
 
