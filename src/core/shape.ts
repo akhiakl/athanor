@@ -58,6 +58,7 @@ export function newShape(a: ActiveArena, r: number, x: number, y: number, rgba =
 
 export function lineTo(a: ActiveArena, r: number, x: number, y: number): void {
   const b = r * HDR_STRIDE;
+  if (!hasRoom(a, r, 2)) return; // callers split-commit before this; never write past the record region
   const lx = a.hdrF[b + H.LAST_X];
   const ly = a.hdrF[b + H.LAST_Y];
   if (Math.fround(x) === lx && Math.fround(y) === ly) return;
@@ -71,6 +72,7 @@ export function lineTo(a: ActiveArena, r: number, x: number, y: number): void {
 export function curveTo(a: ActiveArena, r: number, x: number, y: number, smoothing = true): void {
   if (!smoothing) return lineTo(a, r, x, y);
   const b = r * HDR_STRIDE;
+  if (!hasRoom(a, r, 2)) return;
   const lx = a.hdrF[b + H.LAST_X];
   const ly = a.hdrF[b + H.LAST_Y];
   if (Math.fround(x) === lx && Math.fround(y) === ly) return;
@@ -103,6 +105,12 @@ export function rightAngle(
   out[o + 1] = y1 + d * Math.sin(ang);
 }
 
+/** Worst case the outline needs 4 vertices per spine point (two QUADs), so the vertex region caps the spine well below SPINE_CAP. */
+export function spineFull(a: ActiveArena, r: number): boolean {
+  const b = r * HDR_STRIDE;
+  return a.hdr[b + H.SPINE_COUNT] >= SPINE_CAP || 4 * (a.hdr[b + H.SPINE_COUNT] + 1) + 4 > a.hdr[b + H.VTX_CAP];
+}
+
 /**
  * Appends a spine point with half-width w. Caller guarantees the pen location changed.
  * Returns true when the spine grew (call emitSpine once per tick afterwards).
@@ -111,7 +119,7 @@ export function spineTo(a: ActiveArena, r: number, x: number, y: number, w: numb
   const b = r * HDR_STRIDE;
   const n = a.hdr[b + H.SPINE_COUNT];
   const base = a.hdr[b + H.SPINE_OFF];
-  if (base < 0 || n >= SPINE_CAP) return false; // base < 0: record allocated without a spine
+  if (base < 0 || spineFull(a, r)) return false; // base < 0: record allocated without a spine
   const s = a.spine;
   if (n > 0) {
     const p = 4 * (base + n - 1);
@@ -155,6 +163,7 @@ export function smooth3Tap(pts: Float32Array, n: number): void {
 /** Smooth-affect kernel: writes M, n-2 QUADs and a final LINE into record r. */
 export function smoothKernel(a: ActiveArena, r: number, pts: Float32Array, n: number): void {
   const b = r * HDR_STRIDE;
+  if (n < 2 || 2 * n > a.hdr[b + H.VTX_CAP]) return;
   newShape(a, r, pts[0], pts[1], a.hdr[b + H.RGBA], a.hdrF[b + H.LINE_WIDTH]);
   for (let i = 1; i < n - 1; i++) {
     const sx = 0.25 * pts[2 * i - 2] + 0.5 * pts[2 * i] + 0.25 * pts[2 * i + 2];
