@@ -24,16 +24,19 @@ export class CaptureSink implements CommitSink {
 
 export type Pt = [x: number, y: number, t: number];
 
-/** Pushes down, drags, up through a ring and ticks the engine once. `pen` gives hardware pressure 1. */
+/** Pushes down, drags, up through a ring and ticks the engine. A single point is a tap (down + up). `pen` gives hardware pressure 1. */
 export function stroke(e: Engine, pts: Pt[], opts: { pen?: boolean } = {}): void {
   const ring = new InputRing();
   const kind = opts.pen ? KIND_PEN : KIND_MOUSE;
   const flags = opts.pen ? META_HW_PRESSURE : 0;
+  const write = (x: number, y: number, t: number, phase: number) => {
+    ring.write(x, y, t, 1, 0, 0, phase === PHASE_UP ? 0 : 1, packMeta(kind, phase, flags));
+    if (ring.length >= 1000) e.tick(ring); // like frames: drain before the ring can overflow
+  };
   pts.forEach(([x, y, t], i) => {
     const last = i === pts.length - 1;
-    const phase = i === 0 ? PHASE_DOWN : last ? PHASE_UP : PHASE_MOVE;
-    ring.write(x, y, t, 1, 0, 0, last ? 0 : 1, packMeta(kind, phase, flags));
-    if (ring.length >= 1000) e.tick(ring); // like frames: drain before the ring can overflow
+    write(x, y, t, i === 0 ? PHASE_DOWN : last ? PHASE_UP : PHASE_MOVE);
+    if (i === 0 && last) write(x, y, t, PHASE_UP); // a single point is a tap: down then up
   });
   e.tick(ring);
 }

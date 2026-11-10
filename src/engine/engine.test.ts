@@ -113,6 +113,16 @@ describe('split-commit', () => {
   });
 });
 
+describe('tap', () => {
+  it('a single-point stroke is a down + up and commits a one-point shape', () => {
+    const { e, sink } = setup(shapes());
+    stroke(e, [[5, 7, 0]]);
+    expect(sink.commits).toHaveLength(1);
+    expect(sink.commits[0].cmd).toEqual([MOVE]);
+    close4(sink.commits[0].vtx, [5, 7]);
+  });
+});
+
 describe('engine plumbing', () => {
   it('selecting another module commits an unfinished stroke', () => {
     const { e, sink } = setup(shapes());
