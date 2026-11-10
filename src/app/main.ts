@@ -55,8 +55,8 @@ function frame(): void {
 function write(ev: PointerEvent, phase: number, extra = 0): void {
   const rect = stage.getBoundingClientRect();
   const kind = ev.pointerType === 'pen' ? KIND_PEN : ev.pointerType === 'touch' ? KIND_TOUCH : KIND_MOUSE;
-  // Hardware pressure: pens always; touch only when it reports something other than the 0.5 default.
-  const hw = kind === KIND_PEN ? ev.pressure > 0 : kind === KIND_TOUCH && ev.pressure > 0 && ev.pressure !== 0.5;
+  // Hardware pressure: pens always (even a reported 0 at pointerdown); touch only when it reports something other than the 0.5 default.
+  const hw = kind === KIND_PEN || (kind === KIND_TOUCH && ev.pressure > 0 && ev.pressure !== 0.5);
   ring.write(ev.clientX - rect.left, ev.clientY - rect.top, ev.timeStamp - epoch, ev.pressure, ev.tiltX, ev.tiltY, ev.buttons,
     packMeta(kind, phase, extra | (hw ? META_HW_PRESSURE : 0)));
 }
@@ -88,7 +88,7 @@ window.addEventListener('keydown', (ev) => {
   if (down || ev.ctrlKey || ev.metaKey || ev.altKey) return;
   const n = Number(ev.key);
   if (n >= 1 && n <= createModules.length) engine.select(createModules[n - 1].make());
-  else if (ev.key === 'c') core.clear();
+  else if (ev.key.toLowerCase() === 'c') core.clear();
 });
 
 new ResizeObserver(resize).observe(stage);

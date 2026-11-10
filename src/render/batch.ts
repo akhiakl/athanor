@@ -40,15 +40,21 @@ export function packBatch(a: ActiveArena, recs: Int32Array, n: number): ArrayBuf
 
 /** Zero-copy views over the batch buffer. */
 export function unpackBatch(buf: ArrayBuffer): Shape[] {
+  const fail = (what: string): never => {
+    throw new RangeError(`corrupt CommitBatch: ${what}`);
+  };
+  if (buf.byteLength < 4) fail('shorter than its count word');
   const n = new Uint32Array(buf, 0, 1)[0];
   const out: Shape[] = [];
   let off = 4;
   for (let i = 0; i < n; i++) {
+    if (off + HDR_STRIDE * 4 > buf.byteLength) fail(`record ${i} header is truncated`);
     const hdr = new Int32Array(buf, off, HDR_STRIDE);
     const hdrF = new Float32Array(buf, off, HDR_STRIDE);
     off += HDR_STRIDE * 4;
     const cmdN = hdr[H.CMD_COUNT];
     const vtxN = hdr[H.VTX_COUNT];
+    if (cmdN < 0 || vtxN < 0 || off + pad4(cmdN) + vtxN * 8 > buf.byteLength) fail(`record ${i} body is truncated`);
     const cmd = new Uint8Array(buf, off, cmdN);
     off += pad4(cmdN);
     const vtx = new Float32Array(buf, off, 2 * vtxN);

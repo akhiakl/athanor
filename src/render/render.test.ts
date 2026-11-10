@@ -47,6 +47,22 @@ describe('CommitBatch', () => {
   });
 });
 
+describe('unpackBatch validation', () => {
+  it('throws a clear RangeError on truncated or lying buffers', () => {
+    const a = new ActiveArena();
+    const r = a.alloc();
+    newShape(a, r, 0, 0);
+    curveTo(a, r, 10, 0);
+    const buf = packBatch(a, Int32Array.of(r), 1);
+    expect(() => unpackBatch(buf.slice(0, 2))).toThrow(/corrupt CommitBatch/);
+    expect(() => unpackBatch(buf.slice(0, 30))).toThrow(/header is truncated/);
+    expect(() => unpackBatch(buf.slice(0, buf.byteLength - 4))).toThrow(/body is truncated/);
+    const lying = buf.slice(0);
+    new Uint32Array(lying, 0, 1)[0] = 5; // claims 5 records
+    expect(() => unpackBatch(lying)).toThrow(/corrupt CommitBatch/);
+  });
+});
+
 describe('drawing', () => {
   it('maps the command stream and stroke style (round cap, bevel join)', () => {
     const ctx = mockCtx();

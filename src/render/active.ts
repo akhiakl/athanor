@@ -6,7 +6,8 @@ import { drawRecord, type Ctx2D } from './draw';
 interface Rect { x0: number; y0: number; x1: number; y1: number }
 
 export class ActiveRenderer {
-  private prev: Rect | null = null;
+  private readonly prev: Rect = { x0: 0, y0: 0, x1: 0, y1: 0 }; // reused: no per-frame allocation
+  private hasPrev = false;
   private readonly now: Rect = { x0: 0, y0: 0, x1: 0, y1: 0 };
 
   render(ctx: Ctx2D, e: Engine): void {
@@ -25,12 +26,12 @@ export class ActiveRenderer {
       else { now.x0 = Math.min(now.x0, x0); now.y0 = Math.min(now.y0, y0); now.x1 = Math.max(now.x1, x1); now.y1 = Math.max(now.y1, y1); }
     }
     const p = this.prev;
-    if (!any && !p) return;
-    // clear union(prev, now), redraw only what intersects it
-    const x0 = any ? (p ? Math.min(p.x0, now.x0) : now.x0) : p!.x0;
-    const y0 = any ? (p ? Math.min(p.y0, now.y0) : now.y0) : p!.y0;
-    const x1 = any ? (p ? Math.max(p.x1, now.x1) : now.x1) : p!.x1;
-    const y1 = any ? (p ? Math.max(p.y1, now.y1) : now.y1) : p!.y1;
+    if (!any && !this.hasPrev) return;
+    // Clear union(prev, now). Every active record lies inside it, so all are redrawn under the clip.
+    const x0 = !any ? p.x0 : this.hasPrev ? Math.min(p.x0, now.x0) : now.x0;
+    const y0 = !any ? p.y0 : this.hasPrev ? Math.min(p.y0, now.y0) : now.y0;
+    const x1 = !any ? p.x1 : this.hasPrev ? Math.max(p.x1, now.x1) : now.x1;
+    const y1 = !any ? p.y1 : this.hasPrev ? Math.max(p.y1, now.y1) : now.y1;
     ctx.save();
     ctx.beginPath();
     ctx.rect(x0, y0, x1 - x0, y1 - y0);
@@ -44,6 +45,7 @@ export class ActiveRenderer {
         a.cmd, a.hdr[b + H.CMD_OFF], a.hdr[b + H.CMD_COUNT], a.vtx, a.hdr[b + H.VTX_OFF]);
     }
     ctx.restore();
-    this.prev = any ? { x0: now.x0, y0: now.y0, x1: now.x1, y1: now.y1 } : null;
+    if (any) { p.x0 = now.x0; p.y0 = now.y0; p.x1 = now.x1; p.y1 = now.y1; }
+    this.hasPrev = any;
   }
 }
