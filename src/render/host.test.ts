@@ -149,6 +149,27 @@ describe('hover and affects over the protocol', () => {
     client.tick(0);
     expect(sent.some((m) => m.type === 'tick')).toBe(true);
   });
+  it('clear drops pending shapes at once, and a late ack is harmless', () => {
+    const { client, host, changes } = rig({ worker: true });
+    const e = new Engine(1, client);
+    e.select(shapes());
+    draw(e);
+    expect(client.pending).toHaveLength(1);
+    const before = changes.n;
+    client.clear();
+    expect(client.pending).toHaveLength(0); // cleared strokes must not linger on the active layer
+    expect(changes.n).toBeGreaterThan(before);
+    host.frame(); // the worker still acks the old batch
+    expect(client.pending).toHaveLength(0);
+  });
+  it('dropPending forgets in-flight batches', () => {
+    const { client } = rig({ worker: true });
+    const e = new Engine(1, client);
+    e.select(shapes());
+    draw(e);
+    client.dropPending();
+    expect(client.pending).toHaveLength(0);
+  });
   it('clear empties the log and replay redraws the background', () => {
     const { client, host, ctx } = rig({ worker: true });
     const e = new Engine(1, client);

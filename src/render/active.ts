@@ -55,6 +55,9 @@ export class ActiveRenderer {
       drawRecord(ctx, a.hdr[b + H.RGBA], a.hdr[b + H.FLAGS], a.hdrF[b + H.LINE_WIDTH],
         a.cmd, a.hdr[b + H.CMD_OFF], a.hdr[b + H.CMD_COUNT], a.vtx, a.hdr[b + H.VTX_OFF]);
     }
+    // Drawn twice (here and on the committed canvas) until the worker acks after its next frame. Spec 2.5 accepts one frame of this:
+    // opaque strokes are unaffected, alpha < 1 can look darker. Acking sooner would let this copy vanish before the committed canvas
+    // presents, which flickers the stroke out instead. Revisit with the colour/alpha controls (step 4).
     for (const sh of pending) drawShape(ctx, sh);
     ctx.restore();
     if (any) { p.x0 = now.x0; p.y0 = now.y0; p.x1 = now.x1; p.y1 = now.y1; }

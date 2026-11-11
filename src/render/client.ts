@@ -32,6 +32,7 @@ export class RenderClient implements CommitSink {
 
   onMessage(m: FromWorker): void {
     if (m.type === 'ready') this.ready = true;
+    else if (m.type === 'alive') return; // handled by the bootstrap, before the canvas is transferred
     else if (m.type === 'commitAck' && this.inflight.delete(m.batchId)) {
       this.pending = [...this.inflight.values()].flat();
       this.onChange();
@@ -87,7 +88,15 @@ export class RenderClient implements CommitSink {
     this.send({ type: 'resize', w, h, dpr });
   }
 
+  /** Forgets batches that were handed off but not acked, and tells the active layer to erase them. Late acks are ignored. */
+  dropPending(): void {
+    this.inflight.clear();
+    this.pending = [];
+    this.onChange();
+  }
+
   clear(): void {
+    this.dropPending(); // cleared strokes must not stay visible on the active layer until the worker acks them
     this.send({ type: 'clear' });
   }
 }

@@ -17,3 +17,4 @@ function requestFrame(): void {
 
 const host = new RenderHost((m) => self.postMessage(m), requestFrame, { budgetMs: 4 });
 self.onmessage = (e: MessageEvent<ToWorker>) => host.handle(e.data);
+self.postMessage({ type: 'alive' }); // handshake: the main thread transfers the canvas only after this

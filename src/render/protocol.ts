@@ -12,6 +12,8 @@ export type ToWorker =
   | { type: 'affect'; id: string; on: boolean; params?: AffectParams };
 
 export type FromWorker =
+  /** The worker script loaded and is listening: safe to transfer the canvas to it. */
+  | { type: 'alive' }
   | { type: 'ready' }
   /** The batch is drawn and presented; the main thread may drop its pending copy. */
   | { type: 'commitAck'; batchId: number };

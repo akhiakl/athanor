@@ -6,9 +6,11 @@ import { createModules } from '../modules/registry';
 import { ActiveRenderer } from '../render/active';
 import { RenderClient } from '../render/client';
 import { RenderHost } from '../render/host';
+import type { FromWorker } from '../render/protocol';
+import { Transport } from '../render/transport';
 
 const stage = document.getElementById('stage') as HTMLElement;
-const committedCanvas = document.getElementById('committed') as HTMLCanvasElement;
+let committedCanvas = document.getElementById('committed') as HTMLCanvasElement;
 const activeCanvas = document.getElementById('active') as HTMLCanvasElement;
 const activeCtx = activeCanvas.getContext('2d', { alpha: true, desynchronized: true })!;
 
@@ -17,24 +19,65 @@ const seed = urlSeed !== null ? Number(urlSeed) | 0 : crypto.getRandomValues(new
 
 let scheduled = false; // declared before createBackend: the local host requests a frame during init
 
-/** Worker when OffscreenCanvas transfer exists (spec 2.6); otherwise the same RenderHost runs on the main thread. ?worker=0 forces local. */
+/**
+ * Worker when OffscreenCanvas transfer exists (spec 2.6); otherwise, or if the worker fails to start, the same RenderHost runs on
+ * the main thread. The canvas is transferred only after the worker answers 'alive', so a worker that cannot load leaves the canvas
+ * usable. ?worker=0 forces local. In dev, ?worker=broken points the worker at a missing script to exercise the fallback.
+ */
 function createBackend(): { client: RenderClient; frame: () => boolean } {
   const w = stage.clientWidth;
   const h = stage.clientHeight;
   const dpr = Math.min(window.devicePixelRatio || 1, Math.sqrt(16.7e6 / (w * h)));
-  const wantWorker = new URLSearchParams(location.search).get('worker') !== '0';
-  if (wantWorker && typeof Worker !== 'undefined' && 'transferControlToOffscreen' in committedCanvas) {
-    const worker = new Worker(new URL('../render/worker.ts', import.meta.url), { type: 'module' });
-    const client = new RenderClient((m, t) => worker.postMessage(m, t ?? []), true, () => request());
-    worker.onmessage = (e) => client.onMessage(e.data);
-    const canvas = committedCanvas.transferControlToOffscreen();
-    worker.postMessage({ type: 'init', canvas, dpr, w, h, seed }, [canvas]);
-    return { client, frame: () => false }; // the worker drives its own replay
+  const mode = new URLSearchParams(location.search).get('worker');
+  const transport = new Transport();
+  const client = new RenderClient(transport.send, true, () => request());
+  let host: RenderHost | null = null;
+  let transferred = false;
+  let settled = false;
+
+  const startLocal = (reason: string): void => {
+    if (settled && host) return;
+    settled = true;
+    if (reason) console.warn(`render worker unavailable (${reason}); using the main-thread renderer`);
+    if (transferred) {
+      // a transferred canvas cannot be drawn on again: swap in a fresh element (strokes held by the dead worker are lost)
+      const fresh = document.createElement('canvas');
+      committedCanvas.replaceWith(fresh);
+      committedCanvas = fresh;
+      client.dropPending();
+    }
+    const local = new RenderHost((m) => client.onMessage(m), () => request(), { budgetMs: 2, ackImmediately: true });
+    host = local;
+    local.handle({ type: 'init', canvas: committedCanvas as unknown as OffscreenCanvas, dpr, w, h, seed });
+    transport.attach((m) => local.handle(m));
+  };
+
+  if (mode !== '0' && typeof Worker !== 'undefined' && 'transferControlToOffscreen' in committedCanvas) {
+    const url = import.meta.env.DEV && mode === 'broken' ? '/render-worker-missing.js' : new URL('../render/worker.ts', import.meta.url);
+    const worker = new Worker(url, { type: 'module' });
+    const fail = (reason: string): void => {
+      if (host) return;
+      worker.terminate();
+      startLocal(reason);
+    };
+    worker.onerror = (e) => fail(e.message || 'worker error');
+    worker.onmessageerror = () => fail('message error');
+    worker.onmessage = (e: MessageEvent<FromWorker>) => {
+      if (e.data.type !== 'alive') return client.onMessage(e.data);
+      if (settled || host) return;
+      settled = true;
+      const canvas = committedCanvas.transferControlToOffscreen();
+      transferred = true;
+      worker.postMessage({ type: 'init', canvas, dpr, w, h, seed }, [canvas]);
+      transport.attach((m, t) => worker.postMessage(m, t ?? []));
+    };
+    setTimeout(() => {
+      if (!settled) fail('no response in 5 s');
+    }, 5000);
+  } else {
+    startLocal('');
   }
-  const host: RenderHost = new RenderHost((m) => client.onMessage(m), () => request(), { budgetMs: 2, ackImmediately: true });
-  const client: RenderClient = new RenderClient((m) => host.handle(m), false, () => request());
-  host.handle({ type: 'init', canvas: committedCanvas as unknown as OffscreenCanvas, dpr, w, h, seed });
-  return { client, frame: () => host.frame() };
+  return { client, frame: () => (host ? host.frame() : false) }; // a worker drives its own replay
 }
 
 const { client, frame: backendFrame } = createBackend();
