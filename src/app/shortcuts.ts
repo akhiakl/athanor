@@ -18,7 +18,11 @@ export type Action =
   | { t: 'undo' }
   | { t: 'redo' }
   | { t: 'export' } // Mod+E: export dialog
-  | { t: 'copy' }; // Mod+C: copy the canvas as an image
+  | { t: 'copy' } // Mod+C: copy the canvas as an image
+  | { t: 'pageNext' } // PageDown
+  | { t: 'pagePrev' } // PageUp
+  | { t: 'pageNew' } // Alt+N
+  | { t: 'pagesPanel' }; // Mod+Backslash
 
 export interface Mods { mod: boolean; shift: boolean; alt: boolean }
 
@@ -44,9 +48,11 @@ export function matchShortcut(code: string, { mod, shift, alt }: Mods): Action |
       case 'KeyY': return shift ? null : { t: 'redo' }; // Windows and Linux redo
       case 'KeyE': return shift ? null : { t: 'export' };
       case 'KeyC': return shift ? null : { t: 'copy' };
+      case 'Backslash': return shift ? null : { t: 'pagesPanel' };
       default: return null;
     }
   }
+  if (alt && !shift && code === 'KeyN') return { t: 'pageNew' };
   if (alt) return code === 'Equal' ? { t: 'alpha', d: 10 } : code === 'Minus' ? { t: 'alpha', d: -10 } : null;
   if (shift) return code === 'KeyX' ? { t: 'swapColors' } : null;
   switch (code) {
@@ -55,6 +61,8 @@ export function matchShortcut(code: string, { mod, shift, alt }: Mods): Action |
     case 'KeyH': return { t: 'cursor' };
     case 'KeyS': return { t: 'style' };
     case 'KeyX': return { t: 'colorToBg' };
+    case 'PageDown': return { t: 'pageNext' };
+    case 'PageUp': return { t: 'pagePrev' };
     case 'BracketLeft': return { t: 'width', d: -1 };
     case 'BracketRight': return { t: 'width', d: 1 };
     case 'NumpadMultiply': return { t: 'alpha', d: 10 };

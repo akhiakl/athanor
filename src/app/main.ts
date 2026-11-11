@@ -13,7 +13,10 @@ import { RenderHost } from '../render/host';
 import type { FromWorker } from '../render/protocol';
 import { Transport } from '../render/transport';
 import { copyCanvas, defaultScale } from './exporter';
+import { Docs } from '../doc/docs';
+import { lazyIdbStorage } from '../doc/idb';
 import { createApp } from './app';
+import { createPages } from './pages';
 import { isMac, isTextEntry, matchShortcut } from './shortcuts';
 import { lockViewport } from './viewport';
 
@@ -29,6 +32,7 @@ const urlSeed = new URLSearchParams(location.search).get('seed');
 const seed = urlSeed !== null ? Number(urlSeed) | 0 : crypto.getRandomValues(new Uint32Array(1))[0];
 
 let scheduled = false; // declared before createBackend: the local host requests a frame during init
+let afterFallback: () => void = () => {}; // set once pages exist: the open page is loaded again into the local host
 
 /**
  * Worker when OffscreenCanvas transfer exists (spec 2.6); otherwise, or if the worker fails to start, the same RenderHost runs on
@@ -57,11 +61,13 @@ function createBackend(): { client: RenderClient; frame: () => boolean } {
       committedCanvas = fresh;
       client.dropPending();
     }
+    const reloadPage = transferred;
     client.transfer = false; // the local host never detaches buffers, so skip the defensive copy
-    const local = new RenderHost((m) => client.onMessage(m), () => request(), { budgetMs: 2, ackImmediately: true });
+    const local = new RenderHost((m) => client.onMessage(m), () => request(), { budgetMs: 2, ackImmediately: true, openStorage: async () => lazyIdbStorage() });
     host = local;
     local.handle({ type: 'init', canvas: committedCanvas as unknown as OffscreenCanvas, dpr, w, h, seed });
     transport.attach((m) => local.handle(m));
+    if (reloadPage) afterFallback();
   };
 
   if (mode !== '0' && typeof Worker !== 'undefined' && 'transferControlToOffscreen' in committedCanvas) {
@@ -130,11 +136,24 @@ client.onHistory = (u, r) => {
   app.canUndo.value = u;
   app.canRedo.value = r;
 };
+const pages = createPages(new Docs(lazyIdbStorage()), client, engine, () => ({ w: engine.view.w, h: engine.view.h }), (m) => hud.announce(m));
+afterFallback = () => void pages.reopen();
 mountHud(document.getElementById('hud')!, app, hud, {
   client,
+  pages,
   size: () => ({ w: engine.view.w, h: engine.view.h }),
   dpr: () => effectiveDpr(engine.view.w, engine.view.h, window.devicePixelRatio),
 });
+// Open the last file at its last page. If storage is unavailable (blocked, private mode) drawing still works; it just is not kept.
+pages.boot().catch((err: unknown) => {
+  pages.ready.value = true;
+  hud.announce(`Saving is unavailable (${err instanceof Error ? err.message : 'storage error'}). You can draw, but it will not be kept.`);
+});
+const flushNow = (): void => void client.flushPage().catch(() => {});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushNow(); // the tab may not come back
+});
+addEventListener('pagehide', flushNow);
 effect(() => void (stage.style.cursor = app.cursorHidden.value ? 'none' : 'crosshair'));
 
 // Mirror's axis-move mode shows a crosshair on the guide layer; redrawn only when the axes or the mode change.
@@ -209,7 +228,7 @@ function write(ev: PointerEvent, phase: number, extra = 0): void {
 }
 
 stage.addEventListener('pointerdown', (ev) => {
-  if (!ev.isPrimary || ev.button !== 0) return;
+  if (!ev.isPrimary || ev.button !== 0 || !pages.ready.value) return; // not before the page is open: the load would wipe the stroke
   stage.setPointerCapture(ev.pointerId);
   measure(); // once per stroke, covers scroll/layout shifts
   if (app.axisMove.value) {
@@ -284,6 +303,16 @@ window.addEventListener('keydown', (ev) => {
       }
       return;
     }
+    if (a.t === 'pageNext' || a.t === 'pagePrev' || a.t === 'pageNew' || a.t === 'pagesPanel') {
+      ev.preventDefault();
+      if (down || ev.repeat) return;
+      if (a.t === 'pagesPanel') {
+        hud.pagesOpen.value = !hud.pagesOpen.value;
+        hud.persist();
+      } else if (a.t === 'pageNew') void pages.add();
+      else void pages.step(a.t === 'pageNext' ? 1 : -1);
+      return;
+    }
     const onCanvas = ev.target === document.body || ev.target === stage;
     if ((a.t === 'hudFlip' || a.t === 'hudToggle') && !onCanvas) return;
     if (ev.repeat && a.t !== 'width' && a.t !== 'alpha') return; // auto-repeat would flip toggles at random
@@ -316,4 +345,4 @@ window.addEventListener('keydown', (ev) => {
 new ResizeObserver(resize).observe(stage);
 resize();
 
-if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__athanor = { engine, client, ring, app, hud, frame };
+if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__athanor = { engine, client, ring, app, hud, frame, pages };

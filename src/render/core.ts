@@ -86,6 +86,12 @@ export class RenderCore implements CommitSink {
     this.replay(Infinity);
   }
 
+  /** Empties the committed log and history for a page switch; the caller loads the new page's shapes next. */
+  resetPage(): void {
+    this.store.clear();
+    this.history.reset();
+  }
+
   /** Clear is undoable: shapes are tombstoned as one history op rather than dropped. */
   clear(): void {
     this.history.clearAll();

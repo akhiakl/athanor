@@ -21,8 +21,18 @@ export interface StoreJournal {
   willMutate(id: number, shape: Shape): void;
 }
 
+/** Observer of store changes after they happen: the page recorder (8.6.2). Unlike the journal it also sees undo and redo. */
+export interface StoreObserver {
+  added(id: number): void;
+  removed(id: number): void;
+  revived(id: number): void;
+  /** After a shape's geometry changed in place or was replaced. */
+  mutated(id: number): void;
+}
+
 export class CommittedStore {
   journal: StoreJournal | null = null;
+  readonly observers: StoreObserver[] = [];
   readonly entries: Entry[] = [];
   aliveCount = 0;
   cols = 0;
@@ -106,6 +116,7 @@ export class CommittedStore {
     this.register(id, e);
     if (dirty) this.dirtyRange(e.tx0, e.ty0, e.tx1, e.ty1);
     this.journal?.add(id);
+    for (const o of this.observers) o.added(id);
     return id;
   }
 
@@ -116,6 +127,7 @@ export class CommittedStore {
     e.alive = false;
     this.aliveCount--;
     this.dirtyRange(e.tx0, e.ty0, e.tx1, e.ty1);
+    for (const o of this.observers) o.removed(id);
   }
 
   /** Undo of a removal: the shape comes back at its original z-order (ids are never reused). */
@@ -126,6 +138,7 @@ export class CommittedStore {
     this.aliveCount++;
     this.register(id, e); // re-registers: a resize while it was dead dropped its grid membership
     this.dirtyRange(e.tx0, e.ty0, e.tx1, e.ty1);
+    for (const o of this.observers) o.revived(id);
   }
 
   /** Swaps a live shape for another (undo/redo of a mutation) and re-grids it. */
@@ -161,6 +174,7 @@ export class CommittedStore {
     // Old tiles keep the id (stale but harmless: replay and hit re-check the bbox); the new range is
     // inserted in sorted position, so there are never duplicates and z-order matches the log.
     for (let ty = e.ty0; ty <= e.ty1; ty++) for (let tx = e.tx0; tx <= e.tx1; tx++) this.insert(ty * this.cols + tx, id);
+    for (const o of this.observers) o.mutated(id);
   }
 
   /** Oldest still-alive id, or -1. */

@@ -62,6 +62,15 @@ export class HistoryLog implements StoreJournal {
     this.kind = kind;
   }
 
+  /** Forgets everything: a page switch starts with a clean history (it is not persisted, 8.5.3). */
+  reset(): void {
+    this.undoStack.length = 0;
+    this.redoStack.length = 0;
+    this.cur = null;
+    this.kind = null;
+    this.depth = 0;
+  }
+
   /** Pointer gesture: pointerdown opens a group, pointerup closes it; everything committed or mutated between belongs to it. */
   begin(): void {
     this.closeGroup();

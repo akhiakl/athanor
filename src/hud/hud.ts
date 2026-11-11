@@ -7,7 +7,7 @@ export interface PillPos { edge: Edge; along: number }
 export type HudMode = 'floating' | 'proximity';
 
 const KEY = 'athanor.hud';
-function load(): { mode?: HudMode; pos?: PillPos; collapsed?: boolean; swatches?: boolean } {
+function load(): { mode?: HudMode; pos?: PillPos; collapsed?: boolean; swatches?: boolean; pagesOpen?: boolean } {
   try {
     return JSON.parse(localStorage.getItem(KEY) ?? '{}');
   } catch {
@@ -27,7 +27,7 @@ export function createHud() {
   const announcement = signal('');
   const persist = (): void => {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ mode: mode.value, pos: pos.value, collapsed: collapsed.value, swatches: swatchPanel.value }));
+      localStorage.setItem(KEY, JSON.stringify({ mode: mode.value, pos: pos.value, collapsed: collapsed.value, swatches: swatchPanel.value, pagesOpen: pagesOpen.value }));
     } catch { /* storage unavailable: the toolbar still works, it just forgets */ }
   };
   const model = signal(hudInitial());
@@ -36,6 +36,7 @@ export function createHud() {
   const stroke = signal(false);
   const pickerOpen = signal(false);
   const exportOpen = signal(false);
+  const pagesOpen = signal(saved.pagesOpen ?? false);
   let insideHud = false;
   let hideTimer = 0;
   let restoreTimer = 0;
@@ -56,7 +57,7 @@ export function createHud() {
   }
 
   return {
-    model, height, popup, stroke, pickerOpen, exportOpen, mode, pos, collapsed, swatchPanel, flyout, persist, announcement,
+    model, height, popup, stroke, pickerOpen, exportOpen, pagesOpen, mode, pos, collapsed, swatchPanel, flyout, persist, announcement,
     /** Polite live-region message; cleared first so a repeated message is announced again. */
     announce(msg: string): void {
       announcement.value = '';

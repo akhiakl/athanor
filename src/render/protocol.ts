@@ -12,6 +12,9 @@ export type ToWorker =
   /** Undo history: a pointer gesture opens and closes a group (8.5.2); undo and redo act on the newest group. */
   /** Serialize the committed log. The result comes back as `exportResult` with the same id. */
   | { type: 'export'; id: number; format: 'png' | 'svg'; scale: number; transparent: boolean }
+  /** Open a page of the document (loading its saved drawing) or flush pending saves now. */
+  | { type: 'page'; op: 'open'; pageId: string; width: number; height: number; background: number }
+  | { type: 'page'; op: 'flush'; id: number }
   | { type: 'history'; op: 'begin' | 'end' | 'undo' | 'redo' }
   | { type: 'affect'; id: string; on: boolean; params?: AffectParams }
   /** A pointer or key event for committed affects that need it (Repeat: pointerdown, key B). */
@@ -29,6 +32,10 @@ export type FromWorker =
   | { type: 'repeatCommit' }
   | { type: 'exportResult'; id: number; blob: Blob }
   | { type: 'exportError'; id: number; message: string }
+  /** Page lifecycle and autosave status. `opened` answers a page open; the rest report saving. */
+  | { type: 'pageState'; state: 'opened' | 'saving' | 'saved' | 'error'; pageId?: string; empty?: boolean; message?: string }
+  /** Answers a `page flush`: everything queued before it is written (or failed, see `error`). */
+  | { type: 'pageFlushed'; id: number; error?: string }
   /** What undo and redo can do now, sent when it changes. */
   | { type: 'historyState'; canUndo: boolean; canRedo: boolean }
   /** The batch is drawn and presented; the main thread may drop its pending copy. */

@@ -27,3 +27,6 @@ export const IconUndo = () => (<svg {...base}><path d="M9 14L4 9l5-5" /><path d=
 export const IconRedo = () => (<svg {...base}><path d="M15 14l5-5-5-5" /><path d="M20 9H10a6 6 0 0 0 0 12h3" /></svg>);
 export const IconDownload = () => (<svg {...base}><path d="M12 4v11M7 11l5 5 5-5" /><path d="M5 20h14" /></svg>);
 export const IconCopy = () => (<svg {...base}><rect x="8" y="8" width="12" height="12" rx="2.5" /><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8" /></svg>);
+export const IconArrowUp = () => (<svg {...base} width={16} height={16}><path d="M12 19V6M6 11l6-6 6 6" /></svg>);
+export const IconArrowDown = () => (<svg {...base} width={16} height={16}><path d="M12 5v13M6 13l6 6 6-6" /></svg>);
+export const IconPages = () => (<svg {...base}><rect x="6" y="3.5" width="12" height="15" rx="2" /><path d="M9 21h8a2 2 0 0 0 2-2V8" /></svg>);
