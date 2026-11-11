@@ -17,10 +17,14 @@ export class RenderClient implements CommitSink {
   /** Repeat: a stamp arrived from the worker, or it asks for the held stamps to be committed. */
   onRepeatClone: ((shape: Shape) => void) | null = null;
   onRepeatCommit: (() => void) | null = null;
+  /** What undo and redo can do, whenever it changes. */
+  onHistory: ((canUndo: boolean, canRedo: boolean) => void) | null = null;
 
   private hover_ = new Float32Array(HOVER_MAX * 3);
   private hoverN = 0;
   private affectsOn = new Set<string>();
+  private nextExport = 1;
+  private readonly exports = new Map<number, { resolve(b: Blob): void; reject(e: Error): void }>();
 
   /**
    * @param send transport (worker.postMessage, or a direct call into a local RenderHost)
@@ -40,6 +44,13 @@ export class RenderClient implements CommitSink {
     else if (m.type === 'error') console.error(`render worker: ${m.message}`);
     else if (m.type === 'repeatClone') for (const s of unpackBatch(m.buffer)) this.onRepeatClone?.(s);
     else if (m.type === 'repeatCommit') this.onRepeatCommit?.();
+    else if (m.type === 'historyState') this.onHistory?.(m.canUndo, m.canRedo);
+    else if (m.type === 'exportResult' || m.type === 'exportError') {
+      const p = this.exports.get(m.id);
+      this.exports.delete(m.id);
+      if (m.type === 'exportResult') p?.resolve(m.blob);
+      else p?.reject(new Error(m.message));
+    }
     else if (m.type === 'commitAck' && this.inflight.delete(m.batchId)) {
       this.pending = [...this.inflight.values()].flat();
       this.onChange();
@@ -94,6 +105,32 @@ export class RenderClient implements CommitSink {
   /** Pointer or key event for the committed affects that react to it. */
   event(name: 'down' | 'key', code?: string): void {
     if (this.affectsOn.size > 0) this.send({ type: 'event', name, code });
+  }
+
+  /**
+   * Serializes the committed log in the render thread. Call it synchronously from the user gesture when the result feeds the
+   * clipboard: the promise form of ClipboardItem keeps Safari's user activation (3.4.4).
+   */
+  export(format: 'png' | 'svg', { scale = 1, transparent = false } = {}): Promise<Blob> {
+    const id = this.nextExport++;
+    return new Promise((resolve, reject) => {
+      this.exports.set(id, { resolve, reject });
+      this.send({ type: 'export', id, format, scale, transparent });
+    });
+  }
+
+  /** Pointer gesture boundaries for the undo history. Ordered with commits: send begin before the stroke, end after its commit. */
+  historyBegin(): void {
+    this.send({ type: 'history', op: 'begin' });
+  }
+  historyEnd(): void {
+    this.send({ type: 'history', op: 'end' });
+  }
+  undo(): void {
+    this.send({ type: 'history', op: 'undo' });
+  }
+  redo(): void {
+    this.send({ type: 'history', op: 'redo' });
   }
 
   resize(w: number, h: number, dpr: number): void {

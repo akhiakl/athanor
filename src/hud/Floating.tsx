@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { affectMenu, colorRgba, createMenu, type App } from '../app/app';
 import { moduleUi } from '../app/controls';
 import { Menu, SubBar, SwatchBar } from './Hud';
-import { IconCollapse, IconFlask, IconGrip, IconLayers, IconMinus, IconPalette, IconPlus, IconSliders, IconPen, IconStyle, IconTrash } from './icons';
-import { affectHint, createHint, modLabel } from './keys';
+import { IconCollapse, IconFlask, IconGrip, IconLayers, IconMinus, IconPalette, IconPlus, IconSliders, IconDownload, IconPen, IconRedo, IconStyle, IconTrash, IconUndo } from './icons';
+import { affectHint, createHint, modLabel, shiftLabel } from './keys';
 import { isHoriz, nudge, placementStyle, snap } from './placement';
 import type { Hud } from './hud';
 
@@ -215,6 +215,10 @@ export function FloatingView({ app, hud }: { app: App; hud: Hud }) {
         <button type="button" aria-pressed={app.fill.value} aria-label="Fill" title="Fill instead of stroke (S)" onClick={() => app.setFill(!app.fill.value)}><IconStyle /></button>
         {sep}
         <button type="button" aria-pressed={hud.swatchPanel.value} aria-label="Swatches" title="Swatches (Tab)" onClick={() => { hud.swatchPanel.value = !hud.swatchPanel.value; hud.persist(); }}><IconPalette /></button>
+        {sep}
+        <button type="button" aria-disabled={!app.canUndo.value} aria-label="Undo" title={`Undo (${modLabel}Z)`} onClick={() => { if (app.canUndo.value) { app.run({ t: 'undo' }); hud.announce('Undo'); } }}><IconUndo /></button>
+        <button type="button" aria-disabled={!app.canRedo.value} aria-label="Redo" title={`Redo (${modLabel}${shiftLabel}Z)`} onClick={() => { if (app.canRedo.value) { app.run({ t: 'redo' }); hud.announce('Redo'); } }}><IconRedo /></button>
+        <button type="button" aria-haspopup="dialog" aria-label="Export" title={`Export (${modLabel}E)`} onClick={() => (hud.exportOpen.value = true)}><IconDownload /></button>
         {sep}
         <button
           type="button" class={armed ? 'danger' : undefined} aria-label={armed ? 'Confirm: clear canvas' : 'Clear canvas'}

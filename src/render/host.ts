@@ -3,6 +3,7 @@
 import type { CommittedStore } from './committed';
 import { RenderCore } from './core';
 import type { Ctx2D } from './draw';
+import type { MakeCanvas } from './export';
 import type { FromWorker, ToWorker } from './protocol';
 
 export type HostCtx = Ctx2D & { setTransform(a: number, b: number, c: number, d: number, e: number, f: number): void };
@@ -16,6 +17,8 @@ export interface HostCanvas {
 export interface HostOptions {
   /** Replay time per frame: 4 ms in the worker, 2 ms on the main thread (7.2). */
   budgetMs: number;
+  /** Creates the canvas a PNG export draws into (OffscreenCanvas in a worker and on the main thread alike). */
+  makeCanvas?: MakeCanvas;
   /** Local mode: ack in the same call, since nothing is presented in between. Worker mode acks after the next frame. */
   ackImmediately?: boolean;
 }
@@ -26,6 +29,7 @@ export class RenderHost {
   private ctx: HostCtx | null = null;
   private seed = 0;
   private acks: number[] = [];
+  private lastHistory = { canUndo: false, canRedo: false };
 
   constructor(
     private readonly post: (m: FromWorker, transfer?: Transferable[]) => void,
@@ -80,6 +84,15 @@ export class RenderHost {
         case 'clear':
           core.clear();
           break;
+        case 'export':
+          this.runExport(core, m);
+          break;
+        case 'history':
+          if (m.op === 'begin') core.history.begin();
+          else if (m.op === 'end') core.history.end();
+          else if (m.op === 'undo') core.undo();
+          else core.redo();
+          break;
         case 'affect':
           core.setAffect(m.id, m.on, this.seed, m.params);
           break;
@@ -90,7 +103,31 @@ export class RenderHost {
     } catch (err) {
       this.post({ type: 'error', message: err instanceof Error ? err.message : String(err) });
     }
+    this.reportHistory(core);
     this.requestFrame();
+  }
+
+  private runExport(core: RenderCore, m: Extract<ToWorker, { type: 'export' }>): void {
+    const fail = (err: unknown): void => this.post({ type: 'exportError', id: m.id, message: err instanceof Error ? err.message : String(err) });
+    try {
+      if (m.format === 'svg') {
+        this.post({ type: 'exportResult', id: m.id, blob: core.exportSvg(m.transparent) });
+        return;
+      }
+      const make = this.opts.makeCanvas ?? (typeof OffscreenCanvas !== 'undefined' ? (w: number, h: number) => new OffscreenCanvas(w, h) as unknown as ReturnType<MakeCanvas> : null);
+      if (!make) throw new Error('PNG export needs OffscreenCanvas, which this browser lacks. Export SVG instead.');
+      core.exportPng(m.scale, m.transparent, make).then((blob) => this.post({ type: 'exportResult', id: m.id, blob }), fail);
+    } catch (err) {
+      fail(err);
+    }
+  }
+
+  /** Tells the main thread what undo and redo can do, only when that changed. */
+  private reportHistory(core: RenderCore): void {
+    const canUndo = core.history.canUndo, canRedo = core.history.canRedo;
+    if (canUndo === this.lastHistory.canUndo && canRedo === this.lastHistory.canRedo) return;
+    this.lastHistory = { canUndo, canRedo };
+    this.post({ type: 'historyState', canUndo, canRedo });
   }
 
   private resize(dpr: number, w: number, h: number): void {

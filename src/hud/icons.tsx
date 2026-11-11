@@ -23,3 +23,7 @@ export const IconPalette = () => (<svg {...base}><path d="M12 3a9 9 0 1 0 0 18c1
 export const IconStyle = () => (<svg {...base}><circle cx="12" cy="12" r="7.5" /><path d="M12 4.5a7.5 7.5 0 0 1 0 15z" fill="currentColor" stroke="none" /></svg>);
 /** Ring around a dot: collapses the toolbar to the dot it becomes. */
 export const IconCollapse = () => (<svg {...base}><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none" /></svg>);
+export const IconUndo = () => (<svg {...base}><path d="M9 14L4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-3" /></svg>);
+export const IconRedo = () => (<svg {...base}><path d="M15 14l5-5-5-5" /><path d="M20 9H10a6 6 0 0 0 0 12h3" /></svg>);
+export const IconDownload = () => (<svg {...base}><path d="M12 4v11M7 11l5 5 5-5" /><path d="M5 20h14" /></svg>);
+export const IconCopy = () => (<svg {...base}><rect x="8" y="8" width="12" height="12" rx="2.5" /><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8" /></svg>);

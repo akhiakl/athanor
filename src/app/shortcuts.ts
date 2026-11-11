@@ -14,7 +14,11 @@ export type Action =
   | { t: 'colorToBg' } // X
   | { t: 'swapColors' } // Shift+X
   | { t: 'clear' }
-  | { t: 'collapse' }; // Mod+Period: floating toolbar to a dot and back
+  | { t: 'collapse' } // Mod+Period: floating toolbar to a dot and back
+  | { t: 'undo' }
+  | { t: 'redo' }
+  | { t: 'export' } // Mod+E: export dialog
+  | { t: 'copy' }; // Mod+C: copy the canvas as an image
 
 export interface Mods { mod: boolean; shift: boolean; alt: boolean }
 
@@ -33,8 +37,15 @@ export function matchShortcut(code: string, { mod, shift, alt }: Mods): Action |
   if (n && !mod && !shift && !alt) return { t: 'swatchPick', i: Number(n[1]) };
   if (mod) {
     if (alt) return null;
-    if (shift) return null;
-    return code === 'Backspace' ? { t: 'clear' } : code === 'Period' ? { t: 'collapse' } : null;
+    switch (code) {
+      case 'Backspace': return shift ? null : { t: 'clear' };
+      case 'Period': return shift ? null : { t: 'collapse' };
+      case 'KeyZ': return shift ? { t: 'redo' } : { t: 'undo' };
+      case 'KeyY': return shift ? null : { t: 'redo' }; // Windows and Linux redo
+      case 'KeyE': return shift ? null : { t: 'export' };
+      case 'KeyC': return shift ? null : { t: 'copy' };
+      default: return null;
+    }
   }
   if (alt) return code === 'Equal' ? { t: 'alpha', d: 10 } : code === 'Minus' ? { t: 'alpha', d: -10 } : null;
   if (shift) return code === 'KeyX' ? { t: 'swapColors' } : null;

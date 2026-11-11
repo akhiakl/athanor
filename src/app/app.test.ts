@@ -37,6 +37,16 @@ describe('shortcut map (1.3.1)', () => {
     expect(matchShortcut('Backspace', none)).toBeNull();
     expect(matchShortcut('Period', { ...none, mod: true })).toEqual({ t: 'collapse' });
   });
+  it('maps undo, redo, export and copy on Mod', () => {
+    const mod = { ...none, mod: true };
+    expect(matchShortcut('KeyZ', mod)).toEqual({ t: 'undo' });
+    expect(matchShortcut('KeyZ', { ...mod, shift: true })).toEqual({ t: 'redo' });
+    expect(matchShortcut('KeyY', mod)).toEqual({ t: 'redo' });
+    expect(matchShortcut('KeyE', mod)).toEqual({ t: 'export' });
+    expect(matchShortcut('KeyC', mod)).toEqual({ t: 'copy' });
+    expect(matchShortcut('KeyZ', none)).toBeNull(); // plain Z is zoom, not bound yet
+    expect(matchShortcut('KeyE', { ...mod, alt: true })).toBeNull();
+  });
   it('leaves Blindness R and Repeat B to the modules', () => {
     expect(matchShortcut('KeyR', none)).toBeNull();
     expect(matchShortcut('KeyB', none)).toBeNull();
@@ -109,6 +119,8 @@ describe('app controller', () => {
     const client = {
       setAffect: (id: string, on: boolean, p?: unknown) => sent.push([id, on, p]),
       clear: () => sent.push('clear'),
+      undo: () => sent.push('undo'),
+      redo: () => sent.push('redo'),
     } as unknown as RenderClient;
     const app = createApp(e, client, repeatStamps(), { redraw: () => {} });
     return { e, app, sent, sink };
@@ -193,6 +205,12 @@ describe('app controller', () => {
     app.press('mirror.reset');
     stroke(e);
     expect(app.mirrorAxis()).toEqual([400, 300]);
+  });
+  it('undo and redo go to the render side', () => {
+    const { app, sent } = setup();
+    app.run({ t: 'undo' });
+    app.run({ t: 'redo' });
+    expect(sent).toEqual(['undo', 'redo']);
   });
   it('colour round-trips through HSB', () => {
     expect(colorRgba(rgbaColor(0x1d70b8ff)) >>> 0).toBe(0x1d70b8ff);

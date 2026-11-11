@@ -12,6 +12,7 @@ import { effectiveDpr } from '../render/dpr';
 import { RenderHost } from '../render/host';
 import type { FromWorker } from '../render/protocol';
 import { Transport } from '../render/transport';
+import { copyCanvas, defaultScale } from './exporter';
 import { createApp } from './app';
 import { isMac, isTextEntry, matchShortcut } from './shortcuts';
 import { lockViewport } from './viewport';
@@ -112,6 +113,7 @@ const ring = new InputRing();
 const active = new ActiveRenderer();
 const epoch = performance.now();
 let down = false;
+let groupOpen = false; // an undo history group is open on the render side for the current stroke
 let axisDrag = false;
 let originX = 0; // cached stage offset: reading layout per coalesced event would force reflow in a hot loop
 let originY = 0;
@@ -124,7 +126,15 @@ function measure(): void {
 
 const hud = createHud();
 const app = createApp(engine, client, stamps, { redraw: () => request() });
-mountHud(document.getElementById('hud')!, app, hud);
+client.onHistory = (u, r) => {
+  app.canUndo.value = u;
+  app.canRedo.value = r;
+};
+mountHud(document.getElementById('hud')!, app, hud, {
+  client,
+  size: () => ({ w: engine.view.w, h: engine.view.h }),
+  dpr: () => effectiveDpr(engine.view.w, engine.view.h, window.devicePixelRatio),
+});
 effect(() => void (stage.style.cursor = app.cursorHidden.value ? 'none' : 'crosshair'));
 
 // Mirror's axis-move mode shows a crosshair on the guide layer; redrawn only when the axes or the mode change.
@@ -178,6 +188,10 @@ function frame(): void {
   scheduled = false;
   engine.tick(ring);
   client.tick(engine.createCount);
+  if (groupOpen && !down) {
+    client.historyEnd(); // after the stroke's commit, which the tick above sent, so the whole gesture is one undo step
+    groupOpen = false;
+  }
   // Blindness hides both layers while drawing (5.4.10); the drawing still commits underneath.
   const visibility = engine.flags.blind ? 'hidden' : 'visible';
   activeCanvas.style.visibility = committedCanvas.style.visibility = visibility;
@@ -206,6 +220,8 @@ stage.addEventListener('pointerdown', (ev) => {
   }
   if (ev.pointerType === 'pen') app.setSlot(ev.buttons & 32 ? 1 : 0); // eraser end selects colour slot 1 (F2)
   hud.strokeStart();
+  client.historyBegin();
+  groupOpen = true;
   down = true;
   write(ev, PHASE_DOWN);
   client.event('down');
@@ -256,6 +272,18 @@ window.addEventListener('keydown', (ev) => {
   const a = matchShortcut(ev.code, { mod, shift: ev.shiftKey, alt: ev.altKey });
   if (a) {
     // Tab and Space keep their native meaning (focus traversal, button activation) inside the HUD
+    if (a.t === 'export' || a.t === 'copy') {
+      ev.preventDefault();
+      if (down || ev.repeat) return;
+      if (a.t === 'export') hud.exportOpen.value = !hud.exportOpen.value;
+      else {
+        // synchronous from the key press: the clipboard needs the user activation
+        copyCanvas(client, defaultScale(engine.view.w, engine.view.h, window.devicePixelRatio))
+          .then((what) => hud.announce(what === 'png+svg' ? 'Copied as PNG and SVG' : 'Copied as PNG'))
+          .catch((err: unknown) => hud.announce(err instanceof Error ? err.message : 'Copy failed'));
+      }
+      return;
+    }
     const onCanvas = ev.target === document.body || ev.target === stage;
     if ((a.t === 'hudFlip' || a.t === 'hudToggle') && !onCanvas) return;
     if (ev.repeat && a.t !== 'width' && a.t !== 'alpha') return; // auto-repeat would flip toggles at random
@@ -267,6 +295,7 @@ window.addEventListener('keydown', (ev) => {
       else if (a.t === 'hudToggle' || a.t === 'collapse') hud.collapsed.value = !hud.collapsed.value;
       else {
         app.run(a);
+        if (a.t === 'undo' || a.t === 'redo') hud.announce(a.t === 'undo' ? 'Undo' : 'Redo');
         return;
       }
       hud.persist();
@@ -287,4 +316,4 @@ window.addEventListener('keydown', (ev) => {
 new ResizeObserver(resize).observe(stage);
 resize();
 
-if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__athanor = { engine, client, ring, app, hud };
+if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__athanor = { engine, client, ring, app, hud, frame };
