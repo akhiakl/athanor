@@ -1,0 +1,237 @@
+@layer hud {
+  /* ---- Tokens: one set, light and dark from the user's scheme; surfaces are frosted glass over the canvas ---- */
+  #hud {
+    color-scheme: light dark;
+    --fg: light-dark(#16161a, #f4f4f7);
+    --fg-dim: color-mix(in oklab, var(--fg) 68%, transparent);
+    --glass: light-dark(rgb(255 255 255 / 0.8), rgb(24 24 30 / 0.84));
+    --glass-solid: light-dark(#fbfbfd, #1f1f25);
+    --line: light-dark(rgb(0 0 0 / 0.09), rgb(255 255 255 / 0.13));
+    --accent: light-dark(oklch(0.5 0.21 265), oklch(0.74 0.15 265));
+    --danger: light-dark(oklch(0.52 0.21 25), oklch(0.72 0.16 25));
+    --on-accent: light-dark(#fff, #0c0f20);
+    --hover: color-mix(in oklab, var(--fg) 8%, transparent);
+    --pressed: color-mix(in oklab, var(--accent) 20%, transparent);
+    --shadow: 0 0 0 1px var(--line), 0 10px 34px rgb(0 0 0 / 0.2), 0 2px 6px rgb(0 0 0 / 0.1);
+    --radius: 14px;
+    --hit: 2.25rem; /* >= 24px target; grows on touch */
+    position: fixed; inset: 0 0 auto 0; z-index: 3; pointer-events: none; user-select: none; -webkit-user-select: none;
+    font: 13px/1.35 system-ui, -apple-system, 'Segoe UI', sans-serif; color: var(--fg); font-variant-numeric: tabular-nums;
+  }
+  @media (pointer: coarse) { #hud { --hit: 2.75rem; } }
+  #hud ::selection { background: color-mix(in oklab, var(--accent) 35%, transparent); }
+  #hud input { caret-color: var(--accent); accent-color: var(--accent); }
+  #hud input[type='number'] { appearance: textfield; -moz-appearance: textfield; }
+  #hud input[type='number']::-webkit-inner-spin-button, #hud input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  #hud ::-webkit-scrollbar { inline-size: 8px; block-size: 8px; }
+  #hud ::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--fg) 25%, transparent); border-radius: 99px; }
+  #hud { scrollbar-width: thin; scrollbar-color: color-mix(in oklab, var(--fg) 25%, transparent) transparent; }
+
+  /* ---- Surfaces ---- */
+  .glass, #hud-bars:not(.floating), .picker, .swatch-panel, .floating .pill, .floating .flyout, .popup {
+    background: var(--glass); color: var(--fg); border: 0; box-shadow: var(--shadow);
+    -webkit-backdrop-filter: blur(22px) saturate(1.7); backdrop-filter: blur(22px) saturate(1.7);
+  }
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass, #hud-bars:not(.floating), .picker, .swatch-panel, .floating .pill, .floating .flyout, .popup { background: var(--glass-solid); }
+  }
+
+  /* ---- Controls ---- */
+  #hud button, #hud input[type='number'], #hud input[type='text'] { font: inherit; color: inherit; touch-action: manipulation; }
+  #hud button {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-inline-size: var(--hit); min-block-size: var(--hit);
+    padding: 0 0.6rem; border: 0; border-radius: 10px; background: transparent; cursor: pointer; white-space: nowrap;
+  }
+  #hud button:has(> svg:only-child) { padding: 0; }
+  #hud button[aria-pressed='true'], #hud button[aria-expanded='true'] { background: var(--pressed); color: var(--fg); box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--accent) 75%, transparent); }
+  #hud button[aria-disabled='true'] { opacity: 0.4; cursor: default; }
+  @media (hover: hover) { #hud button:hover:not([aria-pressed='true'], [aria-expanded='true']) { background: var(--hover); } }
+  #hud button:active { transform: scale(0.96); }
+  #hud :is(button, input, .sv):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #hud input[type='number'], #hud input[type='text'] {
+    min-block-size: calc(var(--hit) - 0.4rem); padding: 0 0.5rem; border: 0; border-radius: 8px; background: var(--hover); text-align: center; box-sizing: border-box;
+  }
+  kbd { font: 11px ui-monospace, 'SF Mono', Menlo, monospace; color: var(--fg-dim); margin-inline-start: auto; padding-inline-start: 1.25rem; }
+  .sep { inline-size: 1px; align-self: stretch; margin-block: 0.4rem; background: var(--line); }
+  output { min-inline-size: 2.4em; text-align: end; color: var(--fg-dim); }
+
+  .stepper { display: inline-flex; align-items: center; gap: 2px; }
+  .stepper input { inline-size: 3.2em; }
+  label.slider { display: inline-flex; align-items: center; gap: 0.6rem; color: var(--fg-dim); }
+  label.slider input[type='range'] { inline-size: 7.5rem; }
+
+  /* ---- Range slider: native input, custom track/thumb, fill from --v/--min/--max (set inline by the component) ---- */
+  #hud input[type='range'] {
+    --track: 4px; --thumb: 16px; --progress: calc((var(--v, 0) - var(--min, 0)) / (var(--max, 100) - var(--min, 0)) * 100%);
+    appearance: none; background: transparent; margin: 0; padding: 0; border: 0; block-size: var(--hit); cursor: pointer;
+  }
+  #hud input[type='range']::-webkit-slider-runnable-track {
+    block-size: var(--track); border-radius: 99px;
+    background: linear-gradient(to right, var(--accent) var(--progress), color-mix(in oklab, var(--fg) 45%, transparent) var(--progress));
+  }
+  #hud input[type='range']::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; inline-size: var(--thumb); block-size: var(--thumb); margin-block-start: calc((var(--track) - var(--thumb)) / 2);
+    border: 0; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.18), 0 1px 4px rgb(0 0 0 / 0.35);
+  }
+  #hud input[type='range']::-moz-range-track { block-size: var(--track); border-radius: 99px; background: color-mix(in oklab, var(--fg) 45%, transparent); }
+  #hud input[type='range']::-moz-range-progress { block-size: var(--track); border-radius: 99px; background: var(--accent); }
+  #hud input[type='range']::-moz-range-thumb { inline-size: var(--thumb); block-size: var(--thumb); border: 0; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.18), 0 1px 4px rgb(0 0 0 / 0.35); }
+  #hud input.hue, #hud input.alpha { inline-size: 100%; }
+  #hud input.hue::-webkit-slider-runnable-track { background: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); block-size: 10px; }
+  #hud input.hue::-moz-range-track { background: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); block-size: 10px; }
+  #hud input.alpha::-webkit-slider-runnable-track { background: linear-gradient(90deg, transparent, var(--c)), repeating-conic-gradient(#bbb 0 25%, #fff 0 50%) 0 0 / 8px 8px; block-size: 10px; }
+  #hud input.alpha::-moz-range-track { background: linear-gradient(90deg, transparent, var(--c)), repeating-conic-gradient(#bbb 0 25%, #fff 0 50%) 0 0 / 8px 8px; block-size: 10px; }
+  #hud input.hue::-moz-range-progress, #hud input.alpha::-moz-range-progress { background: transparent; }
+
+  /* ---- Colour dot and swatches: checkerboard underneath so alpha reads ---- */
+  .colour, .strip button, .picker .row button {
+    --c: #000; --a: 1; position: relative; overflow: hidden; border-radius: 50%;
+    background: repeating-conic-gradient(#c9c9cf 0 25%, #fff 0 50%) 0 0 / 8px 8px; box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--fg) 30%, transparent);
+  }
+  .colour::after, .strip button::after, .picker .row button::after { content: ''; position: absolute; inset: 0; background: var(--c); opacity: var(--a); }
+  #hud .colour { border-radius: 50%; inline-size: 1.7rem; min-inline-size: 1.7rem; min-block-size: 1.7rem; block-size: 1.7rem; margin-inline: 0.35rem; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.22), 0 0 0 2px var(--glass-solid), 0 0 0 3.5px var(--line); }
+  .strip { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px; }
+  #hud .strip button { inline-size: 1.6rem; block-size: 1.6rem; min-inline-size: 0; min-block-size: 0; border-radius: 8px; }
+  #hud .strip button[aria-selected='true'] { box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.22), 0 0 0 2px var(--glass-solid), 0 0 0 4px var(--accent); }
+
+  /* ---- Bars shared by proximity and floating modes ---- */
+  .bar, .subbar section { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 6px 10px; }
+  .subbar section + section { border-top: 1px solid var(--line); }
+  .subbar h2 { margin: 0 0.4rem 0 0; font-size: 11px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-dim); }
+
+  /* ---- Menus ---- */
+  .menu { position: relative; }
+  .popup {
+    background: color-mix(in oklab, var(--glass-solid) 94%, transparent);
+    position: absolute; inset-block-start: calc(100% + 8px); inset-inline-start: 0; z-index: 4; min-inline-size: 13rem; display: grid; gap: 1px; padding: 5px; border-radius: var(--radius);
+    transform-origin: top left; max-block-size: min(70dvh, 28rem); overflow-y: auto; overscroll-behavior: contain;
+  }
+  .popup label { display: flex; align-items: center; gap: 0.6rem; min-block-size: 2.1rem; padding: 0 0.6rem; border-radius: 9px; cursor: pointer; }
+  .popup label:has(:checked) { background: var(--pressed); color: var(--fg); }
+  @media (hover: hover) { .popup label:hover:not(:has(:checked)) { background: var(--hover); } }
+  .popup input[type='radio'], .popup input[type='checkbox'] { accent-color: var(--accent); inline-size: 1rem; block-size: 1rem; margin: 0; }
+  @media (prefers-reduced-motion: no-preference) {
+    .popup { animation: pop 140ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+    @keyframes pop { from { opacity: 0; transform: scale(0.96) translateY(4px); } }
+  }
+
+  /* ---- Proximity mode (legacy top-edge reveal) ---- */
+  #hud-bars:not(.floating) { contain: layout style; border-radius: 0 0 var(--radius) var(--radius); padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); transition: opacity 120ms ease, transform 120ms ease; }
+  #hud-bars.docked { position: fixed; inset: 0 auto 0 0; inline-size: 150px; border-radius: 0; }
+  .flip { margin-inline-start: auto; }
+
+  /* ---- Floating toolbar, spec 8.3.2 ---- */
+  #hud-bars.floating {
+    position: fixed; z-index: 3; inline-size: max-content; max-inline-size: calc(100vw - 16px); display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+    padding: 0; background: none; box-shadow: none; transition: opacity 160ms ease; pointer-events: auto;
+  }
+  #hud-bars.floating[data-edge='bottom'] { bottom: calc(14px + env(safe-area-inset-bottom)); }
+  #hud-bars.floating[data-edge='top'] { top: calc(14px + env(safe-area-inset-top)); flex-direction: column-reverse; }
+  #hud-bars.floating[data-edge='left'] { left: calc(14px + env(safe-area-inset-left)); flex-direction: row-reverse; }
+  #hud-bars.floating[data-edge='right'] { right: calc(14px + env(safe-area-inset-right)); flex-direction: row; }
+  .panels { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+  .panels:empty { display: none; }
+  #hud-bars.floating[data-edge='bottom'] .panels, #hud-bars.floating[data-edge='top'] .panels { align-self: stretch; }
+  #hud-bars.floating[data-edge='bottom'] .panels > *, #hud-bars.floating[data-edge='top'] .panels > * { align-self: center; }
+  .floating .pill { min-block-size: 44px; box-sizing: border-box; flex-wrap: nowrap; border-radius: 999px; padding: 4px 8px; gap: 2px; }
+  .floating[data-edge='left'] .pill, .floating[data-edge='right'] .pill { flex-direction: column; padding: 8px 4px; }
+  .floating[data-edge='left'] .sep, .floating[data-edge='right'] .sep { inline-size: auto; block-size: 1px; align-self: stretch; margin: 0.25rem 0.4rem; }
+  .floating .flyout { border-radius: var(--radius); max-inline-size: min(calc(100vw - 16px), 640px); }
+  .floating[data-edge='left'] .flyout, .floating[data-edge='right'] .flyout { max-inline-size: min(calc(100vw - 96px), 640px); }
+  .floating .flyout .subbar { border: 0; }
+  .floating[data-edge='bottom'] .popup { inset-block-start: auto; inset-block-end: calc(100% + 10px); transform-origin: bottom left; }
+  .floating[data-edge='left'] .popup { inset-block-start: 0; inset-inline-start: calc(100% + 10px); }
+  .floating[data-edge='right'] .popup { inset-block-start: 0; inset-inline-start: auto; inset-inline-end: calc(100% + 10px); }
+  #hud .grip { cursor: grab; color: var(--fg-dim); min-inline-size: 1.5rem; touch-action: none; }
+  #hud .grip:active { cursor: grabbing; transform: none; }
+  .chip-label { font-weight: 560; max-inline-size: 7rem; overflow: hidden; text-overflow: ellipsis; }
+  #hud .pill .primary { background: color-mix(in oklab, var(--accent) 14%, transparent); font-weight: 620; padding-inline: 0.8rem; }
+  .pips { display: inline-flex; align-items: center; gap: 4px; }
+  #hud .pip, .pip.more { min-block-size: 1.65rem; min-inline-size: 0; padding: 0 0.6rem; border-radius: 99px; font-size: 12px; font-weight: 560; background: var(--pressed); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 55%, transparent); display: inline-flex; align-items: center; color: var(--fg); }
+  .pip.more { color: var(--fg-dim); box-shadow: none; background: transparent; padding-inline: 0.3rem; }
+  .menu:has(+ .pips) .badge { display: none; }
+  #hud button.danger { background: color-mix(in oklab, var(--danger) 22%, transparent); color: var(--fg); box-shadow: inset 0 0 0 1.5px var(--danger); padding-inline: 0.7rem; }
+  .floating[data-edge='left'] .pill :is(.chip-label, .pips), .floating[data-edge='right'] .pill :is(.chip-label, .pips) { display: none; }
+  .floating[data-edge='left'] .menu:has(+ .pips) .badge, .floating[data-edge='right'] .menu:has(+ .pips) .badge { display: grid; }
+  .floating[data-edge='left'] .stepper, .floating[data-edge='right'] .stepper { flex-direction: column; }
+  .floating[data-edge='left'] .stepper input, .floating[data-edge='right'] .stepper input { inline-size: var(--hit); padding: 0; }
+  .floating[data-edge='left'] .menu > button > svg:last-child, .floating[data-edge='right'] .menu > button > svg:last-child { display: none; }
+  #hud .floating[data-edge='left'] .pill .primary, #hud .floating[data-edge='right'] .pill .primary { padding-inline: 0; }
+  #hud .floating[data-edge='left'] .pill .menu > button, #hud .floating[data-edge='right'] .pill .menu > button { flex-direction: column; gap: 2px; padding: 4px 0; }
+  .badge { min-inline-size: 1.15rem; block-size: 1.15rem; padding: 0 0.3rem; border-radius: 99px; background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 650; display: inline-grid; place-items: center; }
+  .floating.collapsed { flex-direction: row; }
+  /* Launcher (collapsed toolbar): a round glass button with a pencil.
+     The label reveals on hover/focus, and briefly on arrival so the first collapse explains itself. */
+  #hud button.launcher {
+    position: relative; gap: 0; inline-size: auto; min-inline-size: 44px; min-block-size: 44px; padding: 0 11px; border-radius: 999px;
+    background: var(--glass); color: var(--fg); box-shadow: var(--shadow); font-weight: 600; overflow: visible;
+    -webkit-backdrop-filter: blur(22px) saturate(1.7); backdrop-filter: blur(22px) saturate(1.7);
+    transition: background-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+  }
+  @supports not (backdrop-filter: blur(1px)) { #hud button.launcher { background: var(--glass-solid); } }
+  /* beats the generic hover tint, which would otherwise replace the glass with a near-transparent wash and lose the text */
+  #hud button.launcher:is(:hover, :focus-visible) { background: color-mix(in oklab, var(--glass-solid) 88%, var(--fg) 12%); color: var(--fg); box-shadow: var(--shadow), 0 6px 22px rgb(0 0 0 / 0.16); }
+  #hud button.launcher:active { transform: scale(0.95); }
+  .launcher > svg:first-child { inline-size: 22px; block-size: 22px; }
+  .launcher .launcher-label { display: inline-block; max-inline-size: 0; opacity: 0; overflow: hidden; white-space: nowrap; transition: max-inline-size 200ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 160ms ease, margin 200ms ease; }
+  .launcher:is(:hover, :focus-visible) .launcher-label { max-inline-size: 4rem; opacity: 1; margin-inline-start: 8px; }
+  @media (prefers-reduced-motion: no-preference) {
+    .launcher .launcher-label { animation: launcher-intro 3.2s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+    .launcher:is(:hover, :focus-visible) .launcher-label { animation: none; }
+    @keyframes launcher-intro { 0%, 70% { max-inline-size: 4rem; opacity: 1; margin-inline-start: 8px; } 100% { max-inline-size: 0; opacity: 0; margin-inline-start: 0; } }
+  }
+  .floating.collapsed[data-edge='left'] .launcher-label, .floating.collapsed[data-edge='right'] .launcher-label { display: none; }
+  .floating.collapsed[data-edge='left'] .launcher, .floating.collapsed[data-edge='right'] .launcher { padding: 0; inline-size: 44px; justify-content: center; }
+  .swatch-panel { pointer-events: auto; inline-size: min(22rem, calc(100vw - 16px)); border-radius: var(--radius); }
+  .swatch-panel .bar { padding: 10px; gap: 6px; }
+  #hud .swatch-panel .flip { display: none; }
+  .swatch-panel label.slider { flex: 1 1 100%; order: -1; }
+  .swatch-panel .strip { flex: 1 1 100%; }
+  .swatch-panel label.slider input[type='range'] { inline-size: 100%; }
+
+  /* Narrow viewports: the pill wraps to two rows and the menu chips drop to icons so nothing is clipped */
+  @media (max-width: 36rem) {
+    #hud-bars.floating[data-edge='bottom'], #hud-bars.floating[data-edge='top'] { inline-size: calc(100vw - 16px); max-inline-size: none; left: 8px; right: 8px; }
+    .floating[data-edge='bottom'] .pill, .floating[data-edge='top'] .pill { flex-wrap: wrap; justify-content: center; border-radius: 26px; padding: 6px 8px; }
+    .floating .pill :is(.chip-label, .sep, .pips) { display: none; }
+    .floating .menu:has(+ .pips) .badge { display: grid; }
+    .floating .flyout { max-inline-size: none; }
+    .floating .panels > * { inline-size: 100%; }
+  }
+
+  /* ---- Colour picker dialog ---- */
+  .picker { pointer-events: auto; /* #hud is pointer-events:none and the dialog inherits it */ position: fixed; margin: 0; inset: auto; color: var(--fg); inline-size: 15rem; box-sizing: border-box; padding: 12px; border-radius: 18px; border: 0; max-block-size: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; z-index: 5; }
+  .picker[open] { animation: none; }
+  .picker label { display: grid; gap: 4px; margin-block-start: 10px; font-size: 12px; color: var(--fg-dim); }
+  .picker .row { display: grid; grid-template-columns: repeat(auto-fill, minmax(1.5rem, 1fr)); gap: 6px; margin-block-start: 12px; }
+  #hud .picker .row button { inline-size: 100%; aspect-ratio: 1; block-size: auto; min-inline-size: 0; min-block-size: 0; padding: 0; border-radius: 8px; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 2px; margin-block-end: 10px; border-radius: 11px; background: var(--hover); }
+  #hud .seg button { min-block-size: 1.9rem; font-size: 12px; border-radius: 9px; }
+  #hud .seg button[aria-pressed='true'] { background: var(--glass-solid); box-shadow: 0 1px 3px rgb(0 0 0 / 0.25), inset 0 0 0 1.5px color-mix(in oklab, var(--accent) 75%, transparent); }
+  .hexfield { display: flex; align-items: center; gap: 2px; padding-inline-start: 0.6rem; border-radius: 8px; background: var(--hover); color: var(--fg-dim); }
+  #hud .hexfield input[type='text'] { flex: 1; min-inline-size: 0; background: transparent !important; text-align: start; font-family: ui-monospace, 'SF Mono', Menlo, monospace; padding-inline-start: 0.1rem; }
+  .sv { position: relative; inline-size: 100%; aspect-ratio: 1; max-block-size: 34dvh; touch-action: none; cursor: crosshair; border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); }
+  .sv canvas { display: block; inline-size: 100%; block-size: 100%; }
+  .sv i { position: absolute; inline-size: 16px; block-size: 16px; margin: -8px 0 0 -8px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.4); pointer-events: none; }
+
+  .sr-only { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+  .floating .flyout { max-block-size: 40dvh; overflow-y: auto; overscroll-behavior: contain; }
+  @media (prefers-reduced-motion: no-preference) {
+    .panels > * { animation: pop 160ms cubic-bezier(0.2, 0.8, 0.2, 1); transform-origin: bottom center; }
+  }
+
+  /* Touch: every control reaches 44 px, and keyboard hints (meaningless without a keyboard) go */
+  @media (pointer: coarse) {
+    .popup kbd { display: none; }
+    #hud .grip { min-inline-size: var(--hit); }
+    #hud .stepper input[type='number'] { min-block-size: var(--hit); min-inline-size: var(--hit); }
+    #hud .pill .colour { box-sizing: content-box; inline-size: 1.75rem; block-size: 1.75rem; min-inline-size: 1.75rem; min-block-size: 1.75rem; border: calc((var(--hit) - 1.75rem) / 2) solid transparent; background-clip: padding-box; box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--fg) 30%, transparent); margin-inline: 0; }
+    #hud .seg button, #hud .pip { min-block-size: var(--hit); }
+  }
+
+  @media (forced-colors: active) {
+    .glass, #hud-bars, .picker, .swatch-panel, .floating .pill, .floating .flyout, .popup { border: 1px solid CanvasText; background: Canvas; }
+    #hud button[aria-pressed='true'], #hud button[aria-expanded='true'] { outline: 2px solid Highlight; }
+  }
+  @media (prefers-reduced-motion: reduce) { #hud * { transition: none !important; } }
+}

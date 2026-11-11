@@ -1,20 +1,28 @@
 // Minimal canvas page: pointer capture -> InputRing -> Engine -> RenderClient -> (render worker | local host).
-// shortcut: dev-only keys (1-5 select module, C clears) until the real shortcut map and HUD land (step 4).
 import { InputRing, KIND_MOUSE, KIND_PEN, KIND_TOUCH, META_COALESCED, META_HW_PRESSURE, PHASE_CANCEL, PHASE_DOWN, PHASE_MOVE, PHASE_UP, packMeta } from '../core/inputRing';
+import { effect } from '@preact/signals';
+import { idiv } from '../core/math';
+import { createHud } from '../hud/hud';
+import { mountHud } from '../hud/mount';
 import { Engine } from '../engine/engine';
 import { repeatStamps } from '../modules/affect/repeatStamps';
-import { affectModules, createModules } from '../modules/registry';
 import { ActiveRenderer } from '../render/active';
 import { RenderClient } from '../render/client';
 import { effectiveDpr } from '../render/dpr';
 import { RenderHost } from '../render/host';
 import type { FromWorker } from '../render/protocol';
 import { Transport } from '../render/transport';
+import { createApp } from './app';
+import { isMac, isTextEntry, matchShortcut } from './shortcuts';
+import { lockViewport } from './viewport';
 
 const stage = document.getElementById('stage') as HTMLElement;
 let committedCanvas = document.getElementById('committed') as HTMLCanvasElement;
 const activeCanvas = document.getElementById('active') as HTMLCanvasElement;
 const activeCtx = activeCanvas.getContext('2d', { alpha: true, desynchronized: true })!;
+const guidesCanvas = document.getElementById('guides') as HTMLCanvasElement;
+const guidesCtx = guidesCanvas.getContext('2d')!;
+lockViewport(stage);
 
 const urlSeed = new URLSearchParams(location.search).get('seed');
 const seed = urlSeed !== null ? Number(urlSeed) | 0 : crypto.getRandomValues(new Uint32Array(1))[0];
@@ -104,6 +112,7 @@ const ring = new InputRing();
 const active = new ActiveRenderer();
 const epoch = performance.now();
 let down = false;
+let axisDrag = false;
 let originX = 0; // cached stage offset: reading layout per coalesced event would force reflow in a hot loop
 let originY = 0;
 
@@ -113,7 +122,33 @@ function measure(): void {
   originY = r.top;
 }
 
-engine.select(createModules[0].make());
+const hud = createHud();
+const app = createApp(engine, client, stamps, { redraw: () => request() });
+mountHud(document.getElementById('hud')!, app, hud);
+effect(() => void (stage.style.cursor = app.cursorHidden.value ? 'none' : 'crosshair'));
+
+// Mirror's axis-move mode shows a crosshair on the guide layer; redrawn only when the axes or the mode change.
+function drawGuides(): void {
+  const w = engine.view.w, h = engine.view.h;
+  guidesCtx.clearRect(0, 0, w, h);
+  if (!app.axisMove.value) return;
+  let [ax, by] = app.mirrorAxis() ?? [NaN, NaN];
+  if (Number.isNaN(ax)) {
+    ax = idiv(w, 2);
+    by = idiv(h, 2);
+  }
+  guidesCtx.strokeStyle = '#1d70b8';
+  guidesCtx.lineWidth = 1;
+  guidesCtx.setLineDash([6, 4]);
+  guidesCtx.beginPath();
+  guidesCtx.moveTo(ax + 0.5, 0); guidesCtx.lineTo(ax + 0.5, h);
+  guidesCtx.moveTo(0, by + 0.5); guidesCtx.lineTo(w, by + 0.5);
+  guidesCtx.stroke();
+}
+effect(() => {
+  void app.axisMove.value;
+  drawGuides();
+});
 
 function resize(): void {
   const w = stage.clientWidth;
@@ -125,6 +160,10 @@ function resize(): void {
   activeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   engine.view.w = w;
   engine.view.h = h;
+  guidesCanvas.width = Math.round(w * dpr);
+  guidesCanvas.height = Math.round(h * dpr);
+  guidesCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawGuides();
   client.resize(w, h, dpr); // the committed canvas belongs to the backend
   request();
 }
@@ -159,6 +198,14 @@ stage.addEventListener('pointerdown', (ev) => {
   if (!ev.isPrimary || ev.button !== 0) return;
   stage.setPointerCapture(ev.pointerId);
   measure(); // once per stroke, covers scroll/layout shifts
+  if (app.axisMove.value) {
+    axisDrag = true;
+    app.moveAxis(ev.clientX - originX, ev.clientY - originY);
+    drawGuides();
+    return;
+  }
+  if (ev.pointerType === 'pen') app.setSlot(ev.buttons & 32 ? 1 : 0); // eraser end selects colour slot 1 (F2)
+  hud.strokeStart();
   down = true;
   write(ev, PHASE_DOWN);
   client.event('down');
@@ -166,7 +213,13 @@ stage.addEventListener('pointerdown', (ev) => {
 });
 stage.addEventListener('pointermove', (ev) => {
   if (!ev.isPrimary) return;
+  if (axisDrag) {
+    app.moveAxis(ev.clientX - originX, ev.clientY - originY);
+    drawGuides();
+    return;
+  }
   if (!down) {
+    if (hud.mode.value === 'proximity') hud.move(ev.clientY);
     // hover (buttons 0) feeds the committed-domain affects directly
     if (client.hasAffects) {
       client.hover(ev.clientX - originX, ev.clientY - originY, ev.timeStamp - epoch);
@@ -180,47 +233,52 @@ stage.addEventListener('pointermove', (ev) => {
   request();
 }, { passive: true });
 const end = (phase: number) => (ev: PointerEvent) => {
+  if (axisDrag && ev.isPrimary) {
+    axisDrag = false;
+    app.axisMove.value = false; // one placement per use of "Move axis"
+    return;
+  }
   if (!down || !ev.isPrimary) return;
   down = false;
+  hud.strokeEnd();
   write(ev, phase);
   request();
 };
 stage.addEventListener('pointerup', end(PHASE_UP));
 stage.addEventListener('pointercancel', end(PHASE_CANCEL));
+stage.addEventListener('lostpointercapture', end(PHASE_CANCEL)); // capture lost mid-stroke = commit (6.4)
 
-// Dev-only keys until the HUD and the real shortcut map land (step 4): 1-5 create module, C clear,
-// committed affects Q random, W smooth, E limit, T repeat; active affects A displace, S gradient, D mirror, F colour switcher, G blindness.
-// R (Blindness reveal) and B (Repeat toggle) are the spec's own keys and are forwarded to the modules.
-const committedKeys: Record<string, string | undefined> = { q: 'affect.random', w: 'affect.smooth', e: 'affect.limit', t: 'affect.repeat' };
-const activeKeys: Record<string, string | undefined> = { a: 'affect.displace', s: 'affect.gradient', d: 'affect.mirror', f: 'affect.colorSwitcher', g: 'affect.blindness' };
-
-function toggleCommitted(id: string): void {
-  const on = !client.isAffectOn(id);
-  if (id === 'affect.repeat') {
-    if (on) engine.addAffect(stamps);
-    else {
-      stamps.place(engine); // keep what was stamped
-      engine.removeAffect(stamps.id);
-    }
-  }
-  client.setAffect(id, on);
-}
-
-function toggleActive(id: string): void {
-  if (engine.hasAffect(id)) engine.removeAffect(id);
-  else engine.addAffect(affectModules.find((d) => d.id === id)!.make());
-}
+const mac = isMac();
 
 window.addEventListener('keydown', (ev) => {
-  if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.repeat) return; // OS auto-repeat would flip toggles at random
-  const k = ev.key.toLowerCase();
-  if (!down) {
-    const n = Number(ev.key);
-    if (n >= 1 && n <= createModules.length) engine.select(createModules[n - 1].make());
-    else if (k === 'c') client.clear();
-    else if (committedKeys[k]) toggleCommitted(committedKeys[k]!);
-    else if (activeKeys[k]) toggleActive(activeKeys[k]!);
+  if (isTextEntry(ev.target as HTMLElement | null)) return;
+  const mod = mac ? ev.metaKey : ev.ctrlKey;
+  const a = matchShortcut(ev.code, { mod, shift: ev.shiftKey, alt: ev.altKey });
+  if (a) {
+    // Tab and Space keep their native meaning (focus traversal, button activation) inside the HUD
+    const onCanvas = ev.target === document.body || ev.target === stage;
+    if ((a.t === 'hudFlip' || a.t === 'hudToggle') && !onCanvas) return;
+    if (ev.repeat && a.t !== 'width' && a.t !== 'alpha') return; // auto-repeat would flip toggles at random
+    ev.preventDefault();
+    if (down) return; // module and style changes wait for the stroke to end
+    if (hud.mode.value === 'floating') {
+      // Tab toggles the swatches panel, Space and Mod+. collapse the pill to a dot and back
+      if (a.t === 'hudFlip') hud.swatchPanel.value = !hud.swatchPanel.value;
+      else if (a.t === 'hudToggle' || a.t === 'collapse') hud.collapsed.value = !hud.collapsed.value;
+      else {
+        app.run(a);
+        return;
+      }
+      hud.persist();
+    } else if (a.t === 'hudFlip') {
+      const wasVisible = hud.visible();
+      hud.dispatch({ t: 'key' });
+      if (wasVisible) app.run(a); // first Tab only shows the HUD; the next flips main <-> swatch bar
+    } else if (a.t === 'hudToggle' || a.t === 'collapse') hud.dispatch({ t: 'toggle' });
+    else app.run(a);
+    return;
   }
+  if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey) return;
   engine.key(ev.code, ev.key); // Blindness reveal (R)
   client.event('key', ev.code); // Repeat toggle (B)
   request();
@@ -229,4 +287,4 @@ window.addEventListener('keydown', (ev) => {
 new ResizeObserver(resize).observe(stage);
 resize();
 
-if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__athanor = { engine, client, ring };
+if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__athanor = { engine, client, ring, app, hud };
