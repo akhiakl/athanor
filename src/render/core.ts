@@ -1,24 +1,36 @@
-// Main-thread RenderCore: the fallback path of spec 2.6, same commit contract the worker will use.
+// RenderCore: committed-layer logic over a 2D context. Runs in the render worker, or on the main thread as the fallback (spec 2.6).
 import type { ActiveArena } from '../core/arena';
 import type { CommitSink } from '../engine/engine';
-import type { CommittedAffect } from './affects';
+import { createAffect, type AffectParams, type CommittedAffect } from './affects';
 import { packBatch, unpackBatch } from './batch';
 import { CommittedStore } from './committed';
 import { drawShape, type Ctx2D } from './draw';
 
-export class MainThreadRenderCore implements CommitSink {
+export class RenderCore implements CommitSink {
   readonly store = new CommittedStore();
   readonly affects: CommittedAffect[] = [];
 
   constructor(private readonly ctx: Ctx2D, private background = '#ffffff') {}
 
   commit(a: ActiveArena, recs: Int32Array, n: number): void {
-    // Pack even in-process so the worker swap-in changes only the transport.
-    for (const s of unpackBatch(packBatch(a, recs, n))) {
+    this.commitBatch(packBatch(a, recs, n));
+  }
+
+  /** Appends a CommitBatch (3.2.4) on top of the log and draws it directly: no replay needed for appends. */
+  commitBatch(buf: ArrayBuffer): void {
+    for (const s of unpackBatch(buf)) {
       this.store.add(s);
-      drawShape(this.ctx, s); // appended on top: drawn directly, no replay needed
+      drawShape(this.ctx, s);
     }
     for (const af of this.affects) af.committed?.(this.store);
+  }
+
+  /** Enables or replaces (on) / removes (off) a committed affect by id. */
+  setAffect(id: string, on: boolean, seed: number, params?: AffectParams): void {
+    const i = this.affects.findIndex((a) => a.id === id);
+    if (i >= 0) this.affects.splice(i, 1);
+    const af = on ? createAffect(id, seed, params) : null;
+    if (af) this.affects.push(af);
   }
 
   /** Once per frame: committed affects that depend on in-flight shapes (Limit) see the active count. */

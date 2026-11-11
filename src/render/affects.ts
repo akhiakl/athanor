@@ -136,3 +136,15 @@ export function limitAffect({ limit = 10 } = {}): CommittedAffect {
   };
   return { id: 'affect.limit', committed: (store) => run(store, 0), tick: run };
 }
+
+export type AffectParams = Record<string, number | boolean>;
+
+/** Builds a committed affect from its registry id (worker-side factory; params arrive as plain data). */
+export function createAffect(id: string, seed: number, params: AffectParams = {}): CommittedAffect | null {
+  switch (id) {
+    case 'affect.random': return randomAffect(seed, params as { distortion?: number });
+    case 'affect.smooth': return smoothAffect(params as { repeat?: boolean; throttleMs?: number });
+    case 'affect.limit': return limitAffect(params as { limit?: number });
+    default: return null;
+  }
+}

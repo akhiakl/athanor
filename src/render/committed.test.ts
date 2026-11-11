@@ -6,7 +6,7 @@ import { stroke } from '../test/helpers';
 import { limitAffect, randomAffect, smoothAffect } from './affects';
 import type { Shape } from './batch';
 import { CommittedStore } from './committed';
-import { MainThreadRenderCore } from './core';
+import { RenderCore } from './core';
 import type { Ctx2D } from './draw';
 import { pointInShape } from './hit';
 
@@ -251,10 +251,10 @@ function counting(): Ctx2D & { fills: number; strokes: number } {
   return c as unknown as Ctx2D & { fills: number; strokes: number };
 }
 
-describe('MainThreadRenderCore replay', () => {
+describe('RenderCore replay', () => {
   it('replays dirty tiles within the time budget and reports what is left', () => {
     const ctx = counting();
-    const core = new MainThreadRenderCore(ctx);
+    const core = new RenderCore(ctx);
     core.store.setSize(1024, 1024); // 16 tiles
     let t = 0;
     const left = core.replay(2, () => t++); // each tile costs one "ms" of the fake clock
@@ -264,7 +264,7 @@ describe('MainThreadRenderCore replay', () => {
   });
   it('a Limit affect removes old strokes from the canvas on the next replay', () => {
     const ctx = counting();
-    const core = new MainThreadRenderCore(ctx);
+    const core = new RenderCore(ctx);
     core.store.setSize(256, 256);
     core.affects.push(limitAffect({ limit: 3 }));
     const e = new Engine(1, core);

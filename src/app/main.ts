@@ -1,23 +1,89 @@
-// Minimal canvas page for Appendix B step 2: pointer capture -> InputRing -> Engine -> RenderCore.
+// Minimal canvas page: pointer capture -> InputRing -> Engine -> RenderClient -> (render worker | local host).
 // shortcut: dev-only keys (1-5 select module, C clears) until the real shortcut map and HUD land (step 4).
 import { InputRing, KIND_MOUSE, KIND_PEN, KIND_TOUCH, META_COALESCED, META_HW_PRESSURE, PHASE_CANCEL, PHASE_DOWN, PHASE_MOVE, PHASE_UP, packMeta } from '../core/inputRing';
 import { Engine } from '../engine/engine';
 import { createModules } from '../modules/registry';
-import { limitAffect, randomAffect, smoothAffect } from '../render/affects';
 import { ActiveRenderer } from '../render/active';
-import { MainThreadRenderCore } from '../render/core';
+import { RenderClient } from '../render/client';
+import { effectiveDpr } from '../render/dpr';
+import { RenderHost } from '../render/host';
+import type { FromWorker } from '../render/protocol';
+import { Transport } from '../render/transport';
 
 const stage = document.getElementById('stage') as HTMLElement;
-const committedCanvas = document.getElementById('committed') as HTMLCanvasElement;
+let committedCanvas = document.getElementById('committed') as HTMLCanvasElement;
 const activeCanvas = document.getElementById('active') as HTMLCanvasElement;
-const committedCtx = committedCanvas.getContext('2d', { alpha: false, desynchronized: true })!;
 const activeCtx = activeCanvas.getContext('2d', { alpha: true, desynchronized: true })!;
 
 const urlSeed = new URLSearchParams(location.search).get('seed');
 const seed = urlSeed !== null ? Number(urlSeed) | 0 : crypto.getRandomValues(new Uint32Array(1))[0];
 
-const core = new MainThreadRenderCore(committedCtx);
-const engine = new Engine(seed, core);
+let scheduled = false; // declared before createBackend: the local host requests a frame during init
+
+/**
+ * Worker when OffscreenCanvas transfer exists (spec 2.6); otherwise, or if the worker fails to start, the same RenderHost runs on
+ * the main thread. The canvas is transferred only after the worker answers 'alive', so a worker that cannot load leaves the canvas
+ * usable. ?worker=0 forces local. In dev, ?worker=broken points the worker at a missing script to exercise the fallback.
+ */
+function createBackend(): { client: RenderClient; frame: () => boolean } {
+  const w = stage.clientWidth;
+  const h = stage.clientHeight;
+  const dpr = effectiveDpr(w, h, window.devicePixelRatio);
+  const mode = new URLSearchParams(location.search).get('worker');
+  const transport = new Transport();
+  const client = new RenderClient(transport.send, true, () => request());
+  let host: RenderHost | null = null;
+  let transferred = false;
+  let settled = false;
+
+  const startLocal = (reason: string): void => {
+    if (settled && host) return;
+    settled = true;
+    if (reason) console.warn(`render worker unavailable (${reason}); using the main-thread renderer`);
+    if (transferred) {
+      // a transferred canvas cannot be drawn on again: swap in a fresh element (strokes held by the dead worker are lost)
+      const fresh = document.createElement('canvas');
+      committedCanvas.replaceWith(fresh);
+      committedCanvas = fresh;
+      client.dropPending();
+    }
+    client.transfer = false; // the local host never detaches buffers, so skip the defensive copy
+    const local = new RenderHost((m) => client.onMessage(m), () => request(), { budgetMs: 2, ackImmediately: true });
+    host = local;
+    local.handle({ type: 'init', canvas: committedCanvas as unknown as OffscreenCanvas, dpr, w, h, seed });
+    transport.attach((m) => local.handle(m));
+  };
+
+  if (mode !== '0' && typeof Worker !== 'undefined' && 'transferControlToOffscreen' in committedCanvas) {
+    const url = import.meta.env.DEV && mode === 'broken' ? '/render-worker-missing.js' : new URL('../render/worker.ts', import.meta.url);
+    const worker = new Worker(url, { type: 'module' });
+    const fail = (reason: string): void => {
+      if (host) return;
+      worker.terminate();
+      startLocal(reason);
+    };
+    worker.onerror = (e) => fail(e.message || 'worker error');
+    worker.onmessageerror = () => fail('message error');
+    worker.onmessage = (e: MessageEvent<FromWorker>) => {
+      if (e.data.type !== 'alive') return client.onMessage(e.data);
+      if (settled || host) return;
+      settled = true;
+      const canvas = committedCanvas.transferControlToOffscreen();
+      transferred = true;
+      worker.postMessage({ type: 'init', canvas, dpr, w, h, seed }, [canvas]);
+      transport.attach((m, t) => worker.postMessage(m, t ?? []));
+    };
+    setTimeout(() => {
+      if (!settled) fail('no response in 5 s');
+    }, 5000);
+  } else {
+    startLocal('');
+  }
+  return { client, frame: () => (host ? host.frame() : false) }; // a worker drives its own replay
+}
+
+const { client, frame: backendFrame } = createBackend();
+const engine = new Engine(seed, client);
 const ring = new InputRing();
 const active = new ActiveRenderer();
 const epoch = performance.now();
@@ -37,18 +103,14 @@ function resize(): void {
   const w = stage.clientWidth;
   const h = stage.clientHeight;
   measure();
-  // Cap backing area at 16.7 Mpx (iOS Safari limit), spec 7.2.
-  const dpr = Math.min(window.devicePixelRatio || 1, Math.sqrt(16.7e6 / (w * h)));
-  for (const [c, ctx] of [[committedCanvas, committedCtx], [activeCanvas, activeCtx]] as const) {
-    c.width = Math.round(w * dpr);
-    c.height = Math.round(h * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }
-  core.resize(w, h);
+  const dpr = effectiveDpr(w, h, window.devicePixelRatio);
+  activeCanvas.width = Math.round(w * dpr);
+  activeCanvas.height = Math.round(h * dpr);
+  activeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  client.resize(w, h, dpr); // the committed canvas belongs to the backend
   request();
 }
 
-let scheduled = false;
 function request(): void {
   if (scheduled) return;
   scheduled = true;
@@ -58,10 +120,10 @@ function request(): void {
 function frame(): void {
   scheduled = false;
   engine.tick(ring);
-  core.tick(engine.createCount);
-  active.render(activeCtx, engine);
-  const pending = core.replay(2); // main-thread fallback budget: 2 ms per frame (7.2)
-  if (down || pending > 0) request(); // idle when no stroke is active (2.3 step 7)
+  client.tick(engine.createCount);
+  active.render(activeCtx, engine, client.pending);
+  const more = backendFrame(); // local mode replays dirty tiles here; the worker does its own
+  if (down || more) request(); // idle when no stroke is active (2.3 step 7)
 }
 
 function write(ev: PointerEvent, phase: number, extra = 0): void {
@@ -84,8 +146,8 @@ stage.addEventListener('pointermove', (ev) => {
   if (!ev.isPrimary) return;
   if (!down) {
     // hover (buttons 0) feeds the committed-domain affects directly
-    if (core.affects.length > 0) {
-      core.hover(ev.clientX - originX, ev.clientY - originY, ev.timeStamp - epoch);
+    if (client.hasAffects) {
+      client.hover(ev.clientX - originX, ev.clientY - originY, ev.timeStamp - epoch);
       request();
     }
     return;
@@ -106,26 +168,19 @@ stage.addEventListener('pointercancel', end(PHASE_CANCEL));
 
 // dev-only toggles for the committed affects: R random, S smooth, L limit
 const toggles: Record<string, string | undefined> = { r: 'affect.random', s: 'affect.smooth', l: 'affect.limit' };
-const makers: Record<string, () => (typeof core.affects)[number]> = {
-  'affect.random': () => randomAffect(seed),
-  'affect.smooth': () => smoothAffect(),
-  'affect.limit': () => limitAffect(),
-};
-function toggle(id: string): void {
-  const i = core.affects.findIndex((a) => a.id === id);
-  if (i >= 0) core.affects.splice(i, 1);
-  else core.affects.push(makers[id]());
-}
 
 window.addEventListener('keydown', (ev) => {
   if (down || ev.ctrlKey || ev.metaKey || ev.altKey) return;
   const n = Number(ev.key);
   if (n >= 1 && n <= createModules.length) engine.select(createModules[n - 1].make());
-  else if (ev.key.toLowerCase() === 'c') core.clear();
-  else if (toggles[ev.key.toLowerCase()]) toggle(toggles[ev.key.toLowerCase()]!);
+  else if (ev.key.toLowerCase() === 'c') client.clear();
+  else if (toggles[ev.key.toLowerCase()]) {
+    const id = toggles[ev.key.toLowerCase()]!;
+    client.setAffect(id, !client.isAffectOn(id));
+  }
 });
 
 new ResizeObserver(resize).observe(stage);
 resize();
 
-if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__athanor = { engine, core, ring };
+if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__athanor = { engine, client, ring };
