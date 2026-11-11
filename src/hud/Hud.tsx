@@ -4,10 +4,10 @@ import { moduleUi, type ControlSpec } from '../app/controls';
 import type { Hud } from './hud';
 import { ColorPicker } from './ColorPicker';
 import { FloatingView } from './Floating';
+import { affectHint, createHint } from './keys';
 import { IconChevron, IconLock, IconMinus, IconPlus } from './icons';
 
 const hex = (rgba: number): string => `#${(rgba >>> 8).toString(16).padStart(6, '0')}`;
-const keyHint = (i: number, mod: string): string => `${mod}${(i + 1) % 10}`;
 
 /** Native range input; the fill is drawn by CSS from --v/--min/--max (WebKit has no ::progress pseudo-element). */
 export function Range({ min, max, step = 1, value, onInput, cls, ariaLabel, vars }: { min: number; max: number; step?: number; value: number; onInput: (v: number) => void; cls?: string; ariaLabel?: string; vars?: Record<string, string> }) {
@@ -19,12 +19,12 @@ export function Range({ min, max, step = 1, value, onInput, cls, ariaLabel, vars
   );
 }
 
-export function Menu({ id, hud, label, icon, badge, children }: { id: string; hud: Hud; label: string; icon?: preact.ComponentChildren; badge?: number; children: preact.ComponentChildren }) {
+export function Menu({ id, hud, label, icon, badge, cls, ariaLabel, children }: { id: string; hud: Hud; label: string; icon?: preact.ComponentChildren; badge?: number; cls?: string; ariaLabel?: string; children: preact.ComponentChildren }) {
   const open = hud.popup.value === id;
   return (
     <div class="menu">
-      <button type="button" aria-haspopup="true" aria-expanded={open} onClick={() => { hud.popup.value = open ? null : id; hud.flyout.value = false; }}>
-        {icon}<span class="chip-label">{label}</span>{badge ? <span class="badge" aria-label={`${badge} active`}>{badge}</span> : null}<IconChevron />
+      <button type="button" class={cls} aria-label={ariaLabel} aria-haspopup="true" aria-expanded={open} onClick={() => { hud.popup.value = open ? null : id; hud.flyout.value = false; }}>
+        {icon}{label && <span class="chip-label">{label}</span>}{badge ? <span class="badge" aria-label={`${badge} active`}>{badge}</span> : null}<IconChevron />
       </button>
       {open && <div class="popup" role="group" aria-label={label}>{children}</div>}
     </div>
@@ -47,7 +47,7 @@ function MainBar({ app, hud }: { app: App; hud: Hud }) {
         {createMenu.map((id, i) => (
           <label key={id}>
             <input type="radio" name="create" checked={creating === i} onChange={() => { app.selectCreate(i); hud.popup.value = null; }} />
-            {moduleUi[id].title}<kbd>{i < 10 ? keyHint(i, '') : keyHint(i - 10, 'Alt+')}</kbd>
+            {moduleUi[id].title}<kbd>{createHint(i)}</kbd>
           </label>
         ))}
       </Menu>
@@ -55,12 +55,12 @@ function MainBar({ app, hud }: { app: App; hud: Hud }) {
         {affectMenu.map((id, i) => (
           <label key={id}>
             <input type="checkbox" checked={on.has(id)} onChange={() => app.setAffect(id)} />
-            {moduleUi[id].title}<kbd>{i < 10 ? keyHint(i, 'Mod+') : keyHint(i - 10, 'Mod+Shift+')}</kbd>
+            {moduleUi[id].title}<kbd>{affectHint(i)}</kbd>
           </label>
         ))}
       </Menu>
       <span class="sep" role="separator" />
-      <button type="button" onClick={() => app.clear()}>Clear <kbd>Mod+Bksp</kbd></button>
+      <button type="button" onClick={() => app.clear()}>Clear</button>
       <button type="button" class="flip" onClick={() => (app.bar.value = 'swatch')}>Colours <kbd>Tab</kbd></button>
     </div>
   );

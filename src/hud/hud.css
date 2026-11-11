@@ -3,11 +3,12 @@
   #hud {
     color-scheme: light dark;
     --fg: light-dark(#16161a, #f4f4f7);
-    --fg-dim: color-mix(in oklab, var(--fg) 60%, transparent);
+    --fg-dim: color-mix(in oklab, var(--fg) 68%, transparent);
     --glass: light-dark(rgb(255 255 255 / 0.8), rgb(24 24 30 / 0.84));
     --glass-solid: light-dark(#fbfbfd, #1f1f25);
     --line: light-dark(rgb(0 0 0 / 0.09), rgb(255 255 255 / 0.13));
-    --accent: light-dark(oklch(0.58 0.2 265), oklch(0.74 0.15 265));
+    --accent: light-dark(oklch(0.5 0.21 265), oklch(0.74 0.15 265));
+    --danger: light-dark(oklch(0.52 0.21 25), oklch(0.72 0.16 25));
     --on-accent: light-dark(#fff, #0c0f20);
     --hover: color-mix(in oklab, var(--fg) 8%, transparent);
     --pressed: color-mix(in oklab, var(--accent) 20%, transparent);
@@ -42,7 +43,8 @@
     padding: 0 0.6rem; border: 0; border-radius: 10px; background: transparent; cursor: pointer; white-space: nowrap;
   }
   #hud button:has(> svg:only-child) { padding: 0; }
-  #hud button[aria-pressed='true'], #hud button[aria-expanded='true'] { background: var(--pressed); color: var(--accent); }
+  #hud button[aria-pressed='true'], #hud button[aria-expanded='true'] { background: var(--pressed); color: var(--fg); box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--accent) 75%, transparent); }
+  #hud button[aria-disabled='true'] { opacity: 0.4; cursor: default; }
   @media (hover: hover) { #hud button:hover:not([aria-pressed='true'], [aria-expanded='true']) { background: var(--hover); } }
   #hud button:active { transform: scale(0.96); }
   #hud :is(button, input, .sv):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -65,13 +67,13 @@
   }
   #hud input[type='range']::-webkit-slider-runnable-track {
     block-size: var(--track); border-radius: 99px;
-    background: linear-gradient(to right, var(--accent) var(--progress), color-mix(in oklab, var(--fg) 16%, transparent) var(--progress));
+    background: linear-gradient(to right, var(--accent) var(--progress), color-mix(in oklab, var(--fg) 45%, transparent) var(--progress));
   }
   #hud input[type='range']::-webkit-slider-thumb {
     -webkit-appearance: none; appearance: none; inline-size: var(--thumb); block-size: var(--thumb); margin-block-start: calc((var(--track) - var(--thumb)) / 2);
     border: 0; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.18), 0 1px 4px rgb(0 0 0 / 0.35);
   }
-  #hud input[type='range']::-moz-range-track { block-size: var(--track); border-radius: 99px; background: color-mix(in oklab, var(--fg) 16%, transparent); }
+  #hud input[type='range']::-moz-range-track { block-size: var(--track); border-radius: 99px; background: color-mix(in oklab, var(--fg) 45%, transparent); }
   #hud input[type='range']::-moz-range-progress { block-size: var(--track); border-radius: 99px; background: var(--accent); }
   #hud input[type='range']::-moz-range-thumb { inline-size: var(--thumb); block-size: var(--thumb); border: 0; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.18), 0 1px 4px rgb(0 0 0 / 0.35); }
   #hud input.hue, #hud input.alpha { inline-size: 100%; }
@@ -105,7 +107,7 @@
     transform-origin: top left; max-block-size: min(70dvh, 28rem); overflow-y: auto; overscroll-behavior: contain;
   }
   .popup label { display: flex; align-items: center; gap: 0.6rem; min-block-size: 2.1rem; padding: 0 0.6rem; border-radius: 9px; cursor: pointer; }
-  .popup label:has(:checked) { background: var(--pressed); color: var(--accent); }
+  .popup label:has(:checked) { background: var(--pressed); color: var(--fg); }
   @media (hover: hover) { .popup label:hover:not(:has(:checked)) { background: var(--hover); } }
   .popup input[type='radio'], .popup input[type='checkbox'] { accent-color: var(--accent); inline-size: 1rem; block-size: 1rem; margin: 0; }
   @media (prefers-reduced-motion: no-preference) {
@@ -120,17 +122,22 @@
 
   /* ---- Floating toolbar, spec 8.3.2 ---- */
   #hud-bars.floating {
-    position: fixed; z-index: 3; inline-size: max-content; max-inline-size: calc(100vw - 16px); display: flex; flex-direction: column; gap: 8px; align-items: stretch;
+    position: fixed; z-index: 3; inline-size: max-content; max-inline-size: calc(100vw - 16px); display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
     padding: 0; background: none; box-shadow: none; transition: opacity 160ms ease; pointer-events: auto;
   }
   #hud-bars.floating[data-edge='bottom'] { bottom: calc(14px + env(safe-area-inset-bottom)); }
   #hud-bars.floating[data-edge='top'] { top: calc(14px + env(safe-area-inset-top)); flex-direction: column-reverse; }
-  #hud-bars.floating[data-edge='left'] { left: calc(14px + env(safe-area-inset-left)); }
-  #hud-bars.floating[data-edge='right'] { right: calc(14px + env(safe-area-inset-right)); }
+  #hud-bars.floating[data-edge='left'] { left: calc(14px + env(safe-area-inset-left)); flex-direction: row-reverse; }
+  #hud-bars.floating[data-edge='right'] { right: calc(14px + env(safe-area-inset-right)); flex-direction: row; }
+  .panels { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+  .panels:empty { display: none; }
+  #hud-bars.floating[data-edge='bottom'] .panels, #hud-bars.floating[data-edge='top'] .panels { align-self: stretch; }
+  #hud-bars.floating[data-edge='bottom'] .panels > *, #hud-bars.floating[data-edge='top'] .panels > * { align-self: center; }
   .floating .pill { min-block-size: 44px; box-sizing: border-box; flex-wrap: nowrap; border-radius: 999px; padding: 4px 8px; gap: 2px; }
   .floating[data-edge='left'] .pill, .floating[data-edge='right'] .pill { flex-direction: column; padding: 8px 4px; }
   .floating[data-edge='left'] .sep, .floating[data-edge='right'] .sep { inline-size: auto; block-size: 1px; align-self: stretch; margin: 0.25rem 0.4rem; }
-  .floating .flyout { border-radius: var(--radius); max-inline-size: min(92vw, 640px); }
+  .floating .flyout { border-radius: var(--radius); max-inline-size: min(calc(100vw - 16px), 640px); }
+  .floating[data-edge='left'] .flyout, .floating[data-edge='right'] .flyout { max-inline-size: min(calc(100vw - 96px), 640px); }
   .floating .flyout .subbar { border: 0; }
   .floating[data-edge='bottom'] .popup { inset-block-start: auto; inset-block-end: calc(100% + 10px); transform-origin: bottom left; }
   .floating[data-edge='left'] .popup { inset-block-start: 0; inset-inline-start: calc(100% + 10px); }
@@ -138,11 +145,24 @@
   #hud .grip { cursor: grab; color: var(--fg-dim); min-inline-size: 1.5rem; touch-action: none; }
   #hud .grip:active { cursor: grabbing; transform: none; }
   .chip-label { font-weight: 560; max-inline-size: 7rem; overflow: hidden; text-overflow: ellipsis; }
+  #hud .pill .primary { background: color-mix(in oklab, var(--accent) 14%, transparent); font-weight: 620; padding-inline: 0.8rem; }
+  .pips { display: inline-flex; align-items: center; gap: 4px; }
+  #hud .pip, .pip.more { min-block-size: 1.65rem; min-inline-size: 0; padding: 0 0.6rem; border-radius: 99px; font-size: 12px; font-weight: 560; background: var(--pressed); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 55%, transparent); display: inline-flex; align-items: center; color: var(--fg); }
+  .pip.more { color: var(--fg-dim); box-shadow: none; background: transparent; padding-inline: 0.3rem; }
+  .menu:has(+ .pips) .badge { display: none; }
+  #hud button.danger { background: color-mix(in oklab, var(--danger) 22%, transparent); color: var(--fg); box-shadow: inset 0 0 0 1.5px var(--danger); padding-inline: 0.7rem; }
+  .floating[data-edge='left'] .pill :is(.chip-label, .pips), .floating[data-edge='right'] .pill :is(.chip-label, .pips) { display: none; }
+  .floating[data-edge='left'] .menu:has(+ .pips) .badge, .floating[data-edge='right'] .menu:has(+ .pips) .badge { display: grid; }
+  .floating[data-edge='left'] .stepper, .floating[data-edge='right'] .stepper { flex-direction: column; }
+  .floating[data-edge='left'] .stepper input, .floating[data-edge='right'] .stepper input { inline-size: var(--hit); padding: 0; }
+  .floating[data-edge='left'] .menu > button > svg:last-child, .floating[data-edge='right'] .menu > button > svg:last-child { display: none; }
+  #hud .floating[data-edge='left'] .pill .primary, #hud .floating[data-edge='right'] .pill .primary { padding-inline: 0; }
+  #hud .floating[data-edge='left'] .pill .menu > button, #hud .floating[data-edge='right'] .pill .menu > button { flex-direction: column; gap: 2px; padding: 4px 0; }
   .badge { min-inline-size: 1.15rem; block-size: 1.15rem; padding: 0 0.3rem; border-radius: 99px; background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 650; display: inline-grid; place-items: center; }
   .floating.collapsed { flex-direction: row; }
   #hud .dot { position: relative; inline-size: 14px; block-size: 14px; min-inline-size: 0; min-block-size: 0; padding: 0; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--glass-solid), var(--shadow); }
   #hud .dot::before { content: ''; position: absolute; inset: -16px; } /* 44 px hit area around the 14 px dot */
-  .swatch-panel { position: fixed; z-index: 3; inset-inline-end: calc(14px + env(safe-area-inset-right)); inset-block-start: 50%; transform: translateY(-50%); pointer-events: auto; max-inline-size: min(260px, 40vw); border-radius: var(--radius); }
+  .swatch-panel { pointer-events: auto; inline-size: min(22rem, calc(100vw - 16px)); border-radius: var(--radius); }
   .swatch-panel .bar { padding: 10px; gap: 6px; }
   #hud .swatch-panel .flip { display: none; }
   .swatch-panel label.slider { flex: 1 1 100%; order: -1; }
@@ -153,9 +173,10 @@
   @media (max-width: 36rem) {
     #hud-bars.floating[data-edge='bottom'], #hud-bars.floating[data-edge='top'] { inline-size: calc(100vw - 16px); max-inline-size: none; left: 8px !important; right: 8px; transform: none !important; }
     .floating[data-edge='bottom'] .pill, .floating[data-edge='top'] .pill { flex-wrap: wrap; justify-content: center; border-radius: 26px; padding: 6px 8px; }
-    .floating .pill .chip-label, .floating .pill .sep { display: none; }
+    .floating .pill :is(.chip-label, .sep, .pips) { display: none; }
+    .floating .menu:has(+ .pips) .badge { display: grid; }
     .floating .flyout { max-inline-size: none; }
-    .swatch-panel { inset-inline-end: 8px; max-inline-size: min(260px, 60vw); }
+    .floating .panels > * { inline-size: 100%; }
   }
 
   /* ---- Colour picker dialog ---- */

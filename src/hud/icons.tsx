@@ -17,3 +17,9 @@ export const IconChevron = () => (<svg {...base} width={14} height={14}><path d=
 export const IconCheck = () => (<svg {...base} width={14} height={14} stroke-width={2.4}><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>);
 export const IconLock = () => (<svg {...base}><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>);
 export const IconArrowUpDown = () => (<svg {...base}><path d="M8 4v16M8 4l-3 3M8 4l3 3M16 20V4M16 20l-3-3M16 20l3-3" /></svg>);
+export const IconFlask = () => (<svg {...base}><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M7.6 14h8.8" /></svg>);
+export const IconPalette = () => (<svg {...base}><path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-1 1.5-2s0-2 1.5-2h2a4 4 0 0 0 4-4 9 9 0 0 0-9-10z" /><circle cx="8" cy="11" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="7.5" r="1" fill="currentColor" stroke="none" /><circle cx="16" cy="11" r="1" fill="currentColor" stroke="none" /></svg>);
+/** Half-filled disc: the same glyph for Stroke and Fill; the pressed state says which is on. */
+export const IconStyle = () => (<svg {...base}><circle cx="12" cy="12" r="7.5" /><path d="M12 4.5a7.5 7.5 0 0 1 0 15z" fill="currentColor" stroke="none" /></svg>);
+/** Ring around a dot: collapses the toolbar to the dot it becomes. */
+export const IconCollapse = () => (<svg {...base}><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none" /></svg>);
