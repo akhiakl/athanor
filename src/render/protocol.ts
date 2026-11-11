@@ -15,5 +15,7 @@ export type FromWorker =
   /** The worker script loaded and is listening: safe to transfer the canvas to it. */
   | { type: 'alive' }
   | { type: 'ready' }
+  /** A message or frame threw inside the host. The host stays alive with its log intact; the main thread only reports it. */
+  | { type: 'error'; message: string }
   /** The batch is drawn and presented; the main thread may drop its pending copy. */
   | { type: 'commitAck'; batchId: number };

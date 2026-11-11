@@ -109,6 +109,41 @@ describe('commit across the worker boundary', () => {
   });
 });
 
+describe('a failing message does not take the worker down', () => {
+  it('reports a corrupt batch, still acks it, and keeps the log and later commits working', () => {
+    const errors: string[] = [];
+    const { client, host } = rig({ worker: true });
+    const orig = client.onMessage.bind(client);
+    client.onMessage = (m) => (m.type === 'error' ? void errors.push(m.message) : orig(m));
+    const e = new Engine(1, client);
+    e.select(shapes());
+    draw(e);
+    expect(host.store!.aliveCount).toBe(1);
+    host.handle({ type: 'commit', batchId: 99, buffer: new ArrayBuffer(2) }); // corrupt: shorter than its count word
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/corrupt CommitBatch/);
+    expect(host.store!.aliveCount).toBe(1); // the earlier drawing survives
+    draw(e, 50);
+    expect(host.store!.aliveCount).toBe(2); // and the host keeps working
+    host.frame();
+    expect(client.pending).toHaveLength(0);
+  });
+});
+
+describe('transfer flag', () => {
+  it('clearing it after construction stops the defensive copy and the transfer list', () => {
+    const sent: Array<{ m: ToWorker; t?: Transferable[] }> = [];
+    const client = new RenderClient((m, t) => void sent.push({ m, t }), true, () => {});
+    client.transfer = false;
+    const e = new Engine(1, client);
+    e.select(shapes());
+    draw(e);
+    const commit = sent.find((x) => x.m.type === 'commit')!;
+    expect(commit.t).toBeUndefined();
+    expect(client.pending[0].vtx.buffer).toBe((commit.m as Extract<ToWorker, { type: 'commit' }>).buffer); // shared, not copied
+  });
+});
+
 describe('hover and affects over the protocol', () => {
   it('coalesces hover into batches of at most 64 samples', () => {
     const { client, hoverSizes } = rig({ worker: true });

@@ -52,27 +52,37 @@ export class RenderHost {
     }
     const core = this.core;
     if (!core) return; // messages before init are dropped
-    switch (m.type) {
-      case 'commit':
-        core.commitBatch(m.buffer);
-        if (this.opts.ackImmediately) this.post({ type: 'commitAck', batchId: m.batchId });
-        else this.acks.push(m.batchId);
-        break;
-      case 'hover':
-        for (let i = 0; i + 2 < m.samples.length; i += 3) core.hover(m.samples[i], m.samples[i + 1], m.samples[i + 2]);
-        break;
-      case 'tick':
-        core.tick(m.activeCount);
-        break;
-      case 'resize':
-        this.resize(m.dpr, m.w, m.h);
-        break;
-      case 'clear':
-        core.clear();
-        break;
-      case 'affect':
-        core.setAffect(m.id, m.on, this.seed, m.params);
-        break;
+    // A throwing message must not kill the worker: the log lives only here, and an uncaught error would make the page
+    // swap backends and lose the drawing. Report it and carry on. (init still throws, so a worker that cannot start falls back.)
+    try {
+      switch (m.type) {
+        case 'commit':
+          try {
+            core.commitBatch(m.buffer);
+          } finally {
+            // ack even a batch that failed to apply, or it would stay pending on the active layer forever
+            if (this.opts.ackImmediately) this.post({ type: 'commitAck', batchId: m.batchId });
+            else this.acks.push(m.batchId);
+          }
+          break;
+        case 'hover':
+          for (let i = 0; i + 2 < m.samples.length; i += 3) core.hover(m.samples[i], m.samples[i + 1], m.samples[i + 2]);
+          break;
+        case 'tick':
+          core.tick(m.activeCount);
+          break;
+        case 'resize':
+          this.resize(m.dpr, m.w, m.h);
+          break;
+        case 'clear':
+          core.clear();
+          break;
+        case 'affect':
+          core.setAffect(m.id, m.on, this.seed, m.params);
+          break;
+      }
+    } catch (err) {
+      this.post({ type: 'error', message: err instanceof Error ? err.message : String(err) });
     }
     this.requestFrame();
   }
@@ -89,7 +99,12 @@ export class RenderHost {
   frame(): boolean {
     const core = this.core;
     if (!core) return false;
-    const left = core.replay(this.opts.budgetMs);
+    let left = 0;
+    try {
+      left = core.replay(this.opts.budgetMs);
+    } catch (err) {
+      this.post({ type: 'error', message: err instanceof Error ? err.message : String(err) });
+    }
     for (const id of this.acks) this.post({ type: 'commitAck', batchId: id });
     this.acks.length = 0;
     return left > 0;

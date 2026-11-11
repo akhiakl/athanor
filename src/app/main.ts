@@ -47,6 +47,7 @@ function createBackend(): { client: RenderClient; frame: () => boolean } {
       committedCanvas = fresh;
       client.dropPending();
     }
+    client.transfer = false; // the local host never detaches buffers, so skip the defensive copy
     const local = new RenderHost((m) => client.onMessage(m), () => request(), { budgetMs: 2, ackImmediately: true });
     host = local;
     local.handle({ type: 'init', canvas: committedCanvas as unknown as OffscreenCanvas, dpr, w, h, seed });

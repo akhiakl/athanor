@@ -26,13 +26,15 @@ export class RenderClient implements CommitSink {
    */
   constructor(
     private readonly send: (m: ToWorker, transfer?: Transferable[]) => void,
-    private readonly transfer: boolean,
+    /** Mutable: the bootstrap clears it when it falls back to the local host, which never detaches buffers. */
+    public transfer: boolean,
     private readonly onChange: () => void,
   ) {}
 
   onMessage(m: FromWorker): void {
     if (m.type === 'ready') this.ready = true;
     else if (m.type === 'alive') return; // handled by the bootstrap, before the canvas is transferred
+    else if (m.type === 'error') console.error(`render worker: ${m.message}`);
     else if (m.type === 'commitAck' && this.inflight.delete(m.batchId)) {
       this.pending = [...this.inflight.values()].flat();
       this.onChange();
