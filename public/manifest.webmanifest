@@ -1,0 +1,28 @@
+{
+  "name": "Athanor",
+  "short_name": "Athanor",
+  "description": "A local-first drawing tool. Everything you make stays in this browser.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "background_color": "#141418",
+  "theme_color": "#141418",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon-mono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "monochrome" }
+  ],
+  "file_handlers": [
+    { "action": "/open", "accept": { "application/x-athanor": [".athanor"], "application/zip": [".athanor"] } }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": { "files": [{ "name": "files", "accept": ["image/*", "image/svg+xml", ".athanor"] }] }
+  },
+  "launch_handler": { "client_mode": "focus-existing" }
+}

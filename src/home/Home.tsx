@@ -5,12 +5,16 @@ import { download } from '../app/download';
 import { exportAthanor, importAthanor } from '../doc/athanorFile';
 import type { Docs, FileRecord } from '../doc/docs';
 import { backupAll } from '../doc/backup';
+import { needsIosHint } from '../app/pwa';
+import { pwa } from '../app/pwaStore';
+import { classify, takeShared, unsupportedNote } from './share';
 import { href } from '../app/router';
 import { filterFiles, formatBytes, relativeTime, safeFileName, sortFiles, type Sort } from './model';
 import { templates } from './templates';
 
 const LAST_BACKUP = 'athanor.lastBackup';
 const WEEK = 7 * 86_400_000;
+const IOS_HINT = 'athanor.iosHint';
 
 const readBackup = (): number => {
   try {
@@ -42,6 +46,8 @@ export function Home({ docs }: { docs: Docs }) {
   const [storage, setStorage] = useState<Storage | null>(null);
   const [backup, setBackup] = useState(readBackup);
   const pick = useRef<HTMLInputElement>(null);
+  const [iosHint, setIosHint] = useState(() => { try { return !localStorage.getItem(IOS_HINT); } catch { return true; } });
+  const [offlineNote, setOffline] = useState(true);
   const now = Date.now();
 
   const reload = async (): Promise<void> => {
@@ -56,6 +62,25 @@ export function Home({ docs }: { docs: Docs }) {
   useEffect(() => {
     void reload().catch((e: unknown) => setNote(`Could not read your files: ${e instanceof Error ? e.message : 'storage error'}`));
     void loadStorage();
+  }, []);
+  useEffect(() => {
+    // Files shared to the app (the service worker stored them) or opened with it by the OS: import the Athanor ones.
+    const run = async (items: { name: string; bytes: Uint8Array }[]): Promise<void> => {
+      const mine = items.filter((i) => classify(i.name) === 'athanor');
+      const opened: string[] = [];
+      for (const f of mine) {
+        try { opened.push((await importAthanor(docs, f.bytes)).file.id); } catch (err) { say(`${f.name}: ${err instanceof Error ? err.message : 'could not be imported'}`); }
+      }
+      const extra = unsupportedNote(items);
+      if (opened.length === 1 && !extra) { location.replace(href.editor(opened[0])); return; }
+      if (opened.length) { setNote(`Imported ${opened.length} file${opened.length === 1 ? '' : 's'}.${extra ? ' ' + extra : ''}`); void reload(); } else if (extra) say(extra);
+    };
+    if (new URLSearchParams(location.search).get('import') === 'pending') {
+      history.replaceState(null, '', location.pathname);
+      void takeShared(docs.storage).then(run).catch(() => say('The shared files could not be read.'));
+    }
+    const lq = (window as unknown as { launchQueue?: { setConsumer(c: (p: { files: { getFile(): Promise<File> }[] }) => void): void } }).launchQueue;
+    lq?.setConsumer(async (p) => void (await run(await Promise.all(p.files.map(async (h) => { const f = await h.getFile(); return { name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) }; })))));
   }, []);
   useEffect(() => {
     const close = (e: PointerEvent): void => { if (!(e.target as Element).closest('.card-menu')) setMenu(null); };
@@ -125,6 +150,18 @@ export function Home({ docs }: { docs: Docs }) {
         </div>
       </header>
 
+      {pwa.updateReady.value && (
+        <p class="banner" role="status">A new version is ready. <button type="button" class="link" onClick={() => void pwa.applyUpdate()}>Reload to update</button></p>
+      )}
+      {pwa.offlineReady.value && offlineNote && (
+        <p class="banner" role="status">Athanor is ready to work offline. <button type="button" class="link" onClick={() => setOffline(false)}>Dismiss</button></p>
+      )}
+      {pwa.canInstall.value && (files?.length ?? 0) > 0 && (
+        <p class="banner" role="status">Install Athanor for quick access and offline use. <button type="button" class="link" onClick={() => void pwa.promptInstall()}>Install</button></p>
+      )}
+      {iosHint && (files?.length ?? 0) > 0 && needsIosHint(navigator.userAgent, (navigator as unknown as { standalone?: boolean }).standalone === true) && (
+        <p class="banner" role="status">To install Athanor, tap Share, then Add to Home Screen. <button type="button" class="link" onClick={() => { setIosHint(false); try { localStorage.setItem(IOS_HINT, '1'); } catch { /* shown again next time */ } }}>Got it</button></p>
+      )}
       <p class="note" role="status">{note}{undo && <button type="button" class="link" onClick={() => void guard(async () => { await docs.restoreFile(undo); setUndo(null); setNote(''); await reload(); })}>Undo</button>}</p>
 
       <section aria-labelledby="tpl">

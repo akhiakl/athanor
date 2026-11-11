@@ -18,6 +18,7 @@ import { lazyIdbStorage } from '../doc/idb';
 import { createApp, hideModules } from './app';
 import { buildKeymap, type Keymap } from './keymap';
 import { prefsStore } from './prefsStore';
+import { pwa } from './pwaStore';
 import { setHintKeymap } from '../hud/keys';
 import { route } from './current';
 import { href } from './router';
@@ -163,6 +164,8 @@ mountHud(document.getElementById('hud')!, app, hud, {
   pages,
   session,
   goHome,
+  pwa,
+  update: () => void pwa.applyUpdate(updateIsSafe).then((started) => { if (!started && pwa.updateReady.value) hud.announce('Finish your stroke first, then update'); }),
   size: () => ({ w: engine.view.w, h: engine.view.h }),
   dpr: () => effectiveDpr(engine.view.w, engine.view.h, window.devicePixelRatio),
 });
@@ -183,6 +186,17 @@ pages.boot(route.name === 'editor' ? { fileId: route.fileId, pageId: route.pageI
   hud.announce(`Saving is unavailable (${err instanceof Error ? err.message : 'storage error'}). You can draw, but it will not be kept.`);
 });
 const flushNow = (): void => void client.flushPage().catch(() => {});
+/** An update reloads the page, so it waits for the stroke to end and every write to reach the disk (8.7). */
+async function updateIsSafe(): Promise<boolean> {
+  if (down) return false;
+  try {
+    await client.flushPage();
+    return true;
+  } catch {
+    return false; // a failed save: reloading now would lose what is only in memory
+  }
+}
+
 /** Home: everything is written first (a failed write is already reported, and the data is kept for retry only while this page lives). */
 async function goHome(): Promise<void> {
   if (session.recording.value) session.stop();

@@ -32,3 +32,4 @@ export const IconArrowDown = () => (<svg {...base} width={16} height={16}><path 
 export const IconPages = () => (<svg {...base}><rect x="6" y="3.5" width="12" height="15" rx="2" /><path d="M9 21h8a2 2 0 0 0 2-2V8" /></svg>);
 export const IconRecord = () => (<svg {...base}><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3.6" fill="currentColor" stroke="none" /></svg>);
 export const IconHome = () => (<svg {...base}><path d="M4 11l8-7 8 7" /><path d="M6 10v9h12v-9" /><path d="M10 19v-5h4v5" /></svg>);
+export const IconRefresh = () => (<svg {...base}><path d="M20 12a8 8 0 1 1-2.6-5.9" /><path d="M20 4v5h-5" /></svg>);
