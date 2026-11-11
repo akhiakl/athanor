@@ -13,7 +13,8 @@ export type Action =
   | { t: 'swatchPick'; i: number }
   | { t: 'colorToBg' } // X
   | { t: 'swapColors' } // Shift+X
-  | { t: 'clear' };
+  | { t: 'clear' }
+  | { t: 'collapse' }; // Mod+Period: floating toolbar to a dot and back
 
 export interface Mods { mod: boolean; shift: boolean; alt: boolean }
 
@@ -32,7 +33,8 @@ export function matchShortcut(code: string, { mod, shift, alt }: Mods): Action |
   if (n && !mod && !shift && !alt) return { t: 'swatchPick', i: Number(n[1]) };
   if (mod) {
     if (alt) return null;
-    return code === 'Backspace' && !shift ? { t: 'clear' } : null;
+    if (shift) return null;
+    return code === 'Backspace' ? { t: 'clear' } : code === 'Period' ? { t: 'collapse' } : null;
   }
   if (alt) return code === 'Equal' ? { t: 'alpha', d: 10 } : code === 'Minus' ? { t: 'alpha', d: -10 } : null;
   if (shift) return code === 'KeyX' ? { t: 'swapColors' } : null;

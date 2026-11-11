@@ -35,6 +35,7 @@ describe('shortcut map (1.3.1)', () => {
     expect(matchShortcut('Numpad7', none)).toEqual({ t: 'swatchPick', i: 7 });
     expect(matchShortcut('Backspace', { ...none, mod: true })).toEqual({ t: 'clear' });
     expect(matchShortcut('Backspace', none)).toBeNull();
+    expect(matchShortcut('Period', { ...none, mod: true })).toEqual({ t: 'collapse' });
   });
   it('leaves Blindness R and Repeat B to the modules', () => {
     expect(matchShortcut('KeyR', none)).toBeNull();

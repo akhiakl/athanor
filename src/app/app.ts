@@ -188,7 +188,7 @@ export function createApp(engine: Engine, client: RenderClient, stamps: ReturnTy
         case 'cursor': cursorHidden.value = !cursorHidden.value; break;
         case 'clear': client.clear(); break;
         case 'hudFlip': bar.value = bar.value === 'main' ? 'swatch' : 'main'; break;
-        case 'hudToggle': break;
+        case 'hudToggle': case 'collapse': break; // the HUD owns these
       }
     });
     hooks.redraw();

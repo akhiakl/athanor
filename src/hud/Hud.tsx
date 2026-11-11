@@ -3,15 +3,29 @@ import { affectMenu, colorRgba, createMenu, type App } from '../app/app';
 import { moduleUi, type ControlSpec } from '../app/controls';
 import type { Hud } from './hud';
 import { ColorPicker } from './ColorPicker';
+import { FloatingView } from './Floating';
+import { IconChevron, IconLock, IconMinus, IconPlus } from './icons';
 
 const hex = (rgba: number): string => `#${(rgba >>> 8).toString(16).padStart(6, '0')}`;
 const keyHint = (i: number, mod: string): string => `${mod}${(i + 1) % 10}`;
 
-function Menu({ id, hud, label, children }: { id: string; hud: Hud; label: string; children: preact.ComponentChildren }) {
+/** Native range input; the fill is drawn by CSS from --v/--min/--max (WebKit has no ::progress pseudo-element). */
+export function Range({ min, max, step = 1, value, onInput, cls, ariaLabel, vars }: { min: number; max: number; step?: number; value: number; onInput: (v: number) => void; cls?: string; ariaLabel?: string; vars?: Record<string, string> }) {
+  return (
+    <input
+      type="range" class={cls} min={min} max={max} step={step} value={value} aria-label={ariaLabel}
+      style={{ '--v': value, '--min': min, '--max': max, ...vars }} onInput={(e) => onInput(Number(e.currentTarget.value))}
+    />
+  );
+}
+
+export function Menu({ id, hud, label, icon, badge, children }: { id: string; hud: Hud; label: string; icon?: preact.ComponentChildren; badge?: number; children: preact.ComponentChildren }) {
   const open = hud.popup.value === id;
   return (
     <div class="menu">
-      <button type="button" aria-haspopup="true" aria-expanded={open} onClick={() => (hud.popup.value = open ? null : id)}>{label} ▾</button>
+      <button type="button" aria-haspopup="true" aria-expanded={open} onClick={() => { hud.popup.value = open ? null : id; hud.flyout.value = false; }}>
+        {icon}<span class="chip-label">{label}</span>{badge ? <span class="badge" aria-label={`${badge} active`}>{badge}</span> : null}<IconChevron />
+      </button>
       {open && <div class="popup" role="group" aria-label={label}>{children}</div>}
     </div>
   );
@@ -24,9 +38,9 @@ function MainBar({ app, hud }: { app: App; hud: Hud }) {
     <div class="bar" role="toolbar" aria-label="Athanor">
       <button type="button" aria-pressed={app.fill.value} onClick={() => app.setFill(!app.fill.value)}>{app.fill.value ? 'Fill' : 'Stroke'} <kbd>S</kbd></button>
       <label class="stepper">Width
-        <button type="button" aria-label="Thinner" onClick={() => app.setLineWidth(app.lineWidth.value - 1)}>−</button>
+        <button type="button" aria-label="Thinner" onClick={() => app.setLineWidth(app.lineWidth.value - 1)}><IconMinus /></button>
         <input type="number" min={1} max={75} value={app.lineWidth.value} onChange={(e) => app.setLineWidth(Number(e.currentTarget.value))} />
-        <button type="button" aria-label="Thicker" onClick={() => app.setLineWidth(app.lineWidth.value + 1)}>+</button>
+        <button type="button" aria-label="Thicker" onClick={() => app.setLineWidth(app.lineWidth.value + 1)}><IconPlus /></button>
       </label>
       <span class="sep" role="separator" />
       <Menu id="create" hud={hud} label={`Create: ${moduleUi[app.createId.value].title}`}>
@@ -52,7 +66,7 @@ function MainBar({ app, hud }: { app: App; hud: Hud }) {
   );
 }
 
-function SwatchBar({ app, hud }: { app: App; hud: Hud }) {
+export function SwatchBar({ app, hud }: { app: App; hud: Hud }) {
   const c = app.color.value;
   const press = useRef(0);
   const swatches = app.swatches.value;
@@ -71,9 +85,9 @@ function SwatchBar({ app, hud }: { app: App; hud: Hud }) {
   };
   return (
     <div class="bar" role="toolbar" aria-label="Colours">
-      <button type="button" aria-pressed={app.alphaLock.value} onClick={() => (app.alphaLock.value = !app.alphaLock.value)}>Lock α</button>
+      <button type="button" aria-pressed={app.alphaLock.value} aria-label="Lock alpha" title="Lock alpha" onClick={() => (app.alphaLock.value = !app.alphaLock.value)}><IconLock /></button>
       <label class="slider">Alpha
-        <input type="range" min={0} max={255} value={c.a} onInput={(e) => app.setAlpha(Number(e.currentTarget.value))} />
+        <Range min={0} max={255} value={c.a} onInput={app.setAlpha} />
         <output>{c.a}</output>
       </label>
       <button
@@ -85,8 +99,8 @@ function SwatchBar({ app, hud }: { app: App; hud: Hud }) {
         onContextMenu={(e) => { e.preventDefault(); app.setSlot(1); hud.pickerOpen.value = true; }}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); app.setSlot(0); hud.pickerOpen.value = true; } }}
       />
-      <button type="button" aria-label="Add swatch" onClick={() => app.addSwatch()}>+</button>
-      <button type="button" aria-label="Remove swatch" onClick={() => app.removeSwatch()}>−</button>
+      <button type="button" aria-label="Add swatch" title="Add swatch" onClick={() => app.addSwatch()}><IconPlus /></button>
+      <button type="button" aria-label="Remove swatch" title="Remove swatch" onClick={() => app.removeSwatch()}><IconMinus /></button>
       <div class="strip" role="listbox" aria-label="Swatches">
         {swatches.map((rgba, i) => (
           <button
@@ -115,13 +129,13 @@ function Control({ spec, id, app }: { spec: ControlSpec; id: string; app: App })
   }
   return (
     <label class="slider">{spec.label}
-      <input type="range" min={spec.min} max={spec.max} step={spec.step} value={Number(v)} onInput={(e) => set(Number(e.currentTarget.value))} />
+      <Range min={spec.min!} max={spec.max!} step={spec.step} value={Number(v)} onInput={set} />
       <output>{Number(v)}</output>
     </label>
   );
 }
 
-function SubBar({ app }: { app: App }) {
+export function SubBar({ app }: { app: App }) {
   const on = app.affectsOn.value;
   const ids = [app.createId.value, ...affectMenu.filter((id) => on.has(id))];
   const shown = ids.filter((id) => moduleUi[id].controls.length || moduleUi[id].buttons?.length);
@@ -143,25 +157,13 @@ function SubBar({ app }: { app: App }) {
   );
 }
 
-export function HudView({ app, hud }: { app: App; hud: Hud }) {
+function ProximityView({ app, hud }: { app: App; hud: Hud }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = ref.current!;
     const ro = new ResizeObserver(() => (hud.height.value = el.offsetHeight)); // cached: no layout reads during strokes
     ro.observe(el);
-    const close = (e: PointerEvent): void => {
-      if (hud.popup.value && !(e.target as Element).closest('.menu')) hud.popup.value = null;
-    };
-    const esc = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') hud.popup.value = null;
-    };
-    document.addEventListener('pointerdown', close);
-    document.addEventListener('keydown', esc);
-    return () => {
-      ro.disconnect();
-      document.removeEventListener('pointerdown', close);
-      document.removeEventListener('keydown', esc);
-    };
+    return () => ro.disconnect();
   }, []);
   const m = hud.model.value;
   const opacity = hud.stroke.value ? 0 : m.opacity;
@@ -177,6 +179,30 @@ export function HudView({ app, hud }: { app: App; hud: Hud }) {
         {app.bar.value === 'main' ? <MainBar app={app} hud={hud} /> : <SwatchBar app={app} hud={hud} />}
         <SubBar app={app} />
       </div>
+    </>
+  );
+}
+
+export function HudView({ app, hud }: { app: App; hud: Hud }) {
+  useEffect(() => {
+    const close = (e: PointerEvent): void => {
+      if (hud.popup.value && !(e.target as Element).closest('.menu')) hud.popup.value = null;
+    };
+    const esc = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return;
+      hud.popup.value = null;
+      hud.flyout.value = false;
+    };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      document.removeEventListener('keydown', esc);
+    };
+  }, []);
+  return (
+    <>
+      {hud.mode.value === 'floating' ? <FloatingView app={app} hud={hud} /> : <ProximityView app={app} hud={hud} />}
       <ColorPicker app={app} hud={hud} />
     </>
   );

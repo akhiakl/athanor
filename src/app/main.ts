@@ -219,7 +219,7 @@ stage.addEventListener('pointermove', (ev) => {
     return;
   }
   if (!down) {
-    hud.move(ev.clientY);
+    if (hud.mode.value === 'proximity') hud.move(ev.clientY);
     // hover (buttons 0) feeds the committed-domain affects directly
     if (client.hasAffects) {
       client.hover(ev.clientX - originX, ev.clientY - originY, ev.timeStamp - epoch);
@@ -262,11 +262,20 @@ window.addEventListener('keydown', (ev) => {
     if (ev.repeat && a.t !== 'width' && a.t !== 'alpha') return; // auto-repeat would flip toggles at random
     ev.preventDefault();
     if (down) return; // module and style changes wait for the stroke to end
-    if (a.t === 'hudFlip') {
+    if (hud.mode.value === 'floating') {
+      // Tab toggles the swatches panel, Space and Mod+. collapse the pill to a dot and back
+      if (a.t === 'hudFlip') hud.swatchPanel.value = !hud.swatchPanel.value;
+      else if (a.t === 'hudToggle' || a.t === 'collapse') hud.collapsed.value = !hud.collapsed.value;
+      else {
+        app.run(a);
+        return;
+      }
+      hud.persist();
+    } else if (a.t === 'hudFlip') {
       const wasVisible = hud.visible();
       hud.dispatch({ t: 'key' });
       if (wasVisible) app.run(a); // first Tab only shows the HUD; the next flips main <-> swatch bar
-    } else if (a.t === 'hudToggle') hud.dispatch({ t: 'toggle' });
+    } else if (a.t === 'hudToggle' || a.t === 'collapse') hud.dispatch({ t: 'toggle' });
     else app.run(a);
     return;
   }

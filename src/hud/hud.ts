@@ -2,7 +2,33 @@
 import { signal } from '@preact/signals';
 import { hudInitial, hudNext, type HudEvent } from './hudState';
 
+export type Edge = 'bottom' | 'top' | 'left' | 'right';
+export interface PillPos { edge: Edge; along: number }
+export type HudMode = 'floating' | 'proximity';
+
+const KEY = 'athanor.hud';
+function load(): { mode?: HudMode; pos?: PillPos; collapsed?: boolean; swatches?: boolean } {
+  try {
+    return JSON.parse(localStorage.getItem(KEY) ?? '{}');
+  } catch {
+    return {}; // private window or blocked storage: defaults
+  }
+}
+
 export function createHud() {
+  const saved = load();
+  const q = new URLSearchParams(location.search).get('hud');
+  /** Spec 8.3.2: focus mode with the floating pill is the default; `hud.mode = proximity` is the legacy top-edge reveal (1.4). */
+  const mode = signal<HudMode>(q === 'proximity' || q === 'floating' ? q : saved.mode === 'proximity' ? 'proximity' : 'floating');
+  const pos = signal<PillPos>(saved.pos ?? { edge: 'bottom', along: 0.5 });
+  const collapsed = signal(saved.collapsed ?? false);
+  const swatchPanel = signal(saved.swatches ?? false);
+  const flyout = signal(false);
+  const persist = (): void => {
+    try {
+      localStorage.setItem(KEY, JSON.stringify({ mode: mode.value, pos: pos.value, collapsed: collapsed.value, swatches: swatchPanel.value }));
+    } catch { /* storage unavailable: the toolbar still works, it just forgets */ }
+  };
   const model = signal(hudInitial());
   const height = signal(0);
   const popup = signal<string | null>(null);
@@ -28,7 +54,7 @@ export function createHud() {
   }
 
   return {
-    model, height, popup, stroke, pickerOpen,
+    model, height, popup, stroke, pickerOpen, mode, pos, collapsed, swatchPanel, flyout, persist,
     dispatch,
     /** Pointer moved over the stage (not the HUD): proximity. */
     move: (y: number): void => dispatch({ t: 'move', y, h: height.value, popup: popup.value !== null || pickerOpen.value, stroke: stroke.value }),
@@ -36,6 +62,7 @@ export function createHud() {
       clearTimeout(restoreTimer);
       stroke.value = true;
       popup.value = null;
+      flyout.value = false; // pointerdown on the canvas closes the flyout
       dispatch({ t: 'down' });
     },
     strokeEnd(): void {

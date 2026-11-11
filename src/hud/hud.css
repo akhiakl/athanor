@@ -1,77 +1,162 @@
 @layer hud {
-  :root {
-    --hud-bg: rgb(250 250 250 / 0.94);
-    --hud-fg: #1b1b1f;
-    --hud-line: rgb(0 0 0 / 0.18);
-    --hud-accent: #1d70b8;
-    --hud-pressed: rgb(29 112 184 / 0.18);
+  /* ---- Tokens: one set, light and dark from the user's scheme; surfaces are frosted glass over the canvas ---- */
+  #hud {
+    color-scheme: light dark;
+    --fg: light-dark(#16161a, #f4f4f7);
+    --fg-dim: color-mix(in oklab, var(--fg) 60%, transparent);
+    --glass: light-dark(rgb(255 255 255 / 0.8), rgb(24 24 30 / 0.84));
+    --glass-solid: light-dark(#fbfbfd, #1f1f25);
+    --line: light-dark(rgb(0 0 0 / 0.09), rgb(255 255 255 / 0.13));
+    --accent: light-dark(oklch(0.58 0.2 265), oklch(0.74 0.15 265));
+    --on-accent: light-dark(#fff, #0c0f20);
+    --hover: color-mix(in oklab, var(--fg) 8%, transparent);
+    --pressed: color-mix(in oklab, var(--accent) 20%, transparent);
+    --shadow: 0 0 0 0.5px var(--line), 0 10px 34px rgb(0 0 0 / 0.2), 0 2px 6px rgb(0 0 0 / 0.1);
+    --radius: 14px;
+    --hit: 2.25rem; /* >= 24px target; grows on touch */
+    position: fixed; inset: 0 0 auto 0; z-index: 3; pointer-events: none; user-select: none; -webkit-user-select: none;
+    font: 13px/1.35 system-ui, -apple-system, 'Segoe UI', sans-serif; color: var(--fg); font-variant-numeric: tabular-nums;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --hud-bg: rgb(32 32 36 / 0.94);
-      --hud-fg: #f2f2f4;
-      --hud-line: rgb(255 255 255 / 0.22);
-      --hud-accent: #6db3f2;
-      --hud-pressed: rgb(109 179 242 / 0.25);
-    }
+  @media (pointer: coarse) { #hud { --hit: 2.75rem; } }
+
+  /* ---- Surfaces ---- */
+  .glass, #hud-bars:not(.floating), .picker, .swatch-panel, .floating .pill, .floating .flyout, .popup {
+    background: var(--glass); color: var(--fg); border: 0; box-shadow: var(--shadow);
+    -webkit-backdrop-filter: blur(22px) saturate(1.7); backdrop-filter: blur(22px) saturate(1.7);
   }
-  #hud { position: fixed; inset: 0 0 auto 0; z-index: 3; pointer-events: none; user-select: none; -webkit-user-select: none; }
-  #hud-bars {
-    pointer-events: none; contain: layout style; color: var(--hud-fg); background: var(--hud-bg);
-    border-bottom: 1px solid var(--hud-line); font: 13px/1.3 system-ui, sans-serif;
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
-    transition: opacity 120ms ease, transform 120ms ease; /* only compositor properties animate */
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass, #hud-bars:not(.floating), .picker, .swatch-panel, .floating .pill, .floating .flyout, .popup { background: var(--glass-solid); }
   }
-  @media (prefers-reduced-motion: reduce) { #hud-bars { transition: none; } }
-  #hud-bars.docked { position: fixed; inset: 0 auto 0 0; width: 150px; border: 0; border-right: 1px solid var(--hud-line); }
-  .bar, .subbar section { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 10px; }
-  .subbar { border-top: 1px solid var(--hud-line); }
-  .subbar section { padding-block: 4px; }
-  .subbar h2 { margin: 0; font-size: 12px; font-weight: 600; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.04em; }
-  .sep { width: 1px; align-self: stretch; background: var(--hud-line); }
-  button, input[type='number'], input[type='text'] {
-    font: inherit; color: inherit; background: transparent; border: 1px solid var(--hud-line); border-radius: 6px;
-    padding: 4px 8px; touch-action: manipulation; min-height: 28px;
+
+  /* ---- Controls ---- */
+  #hud button, #hud input[type='number'], #hud input[type='text'] { font: inherit; color: inherit; touch-action: manipulation; }
+  #hud button {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-inline-size: var(--hit); min-block-size: var(--hit);
+    padding: 0 0.6rem; border: 0; border-radius: 10px; background: transparent; cursor: pointer; white-space: nowrap;
   }
-  button { cursor: pointer; }
-  button:focus-visible, input:focus-visible, .sv:focus-visible { outline: 2px solid var(--hud-accent); outline-offset: 1px; }
-  button[aria-pressed='true'], .menu button[aria-expanded='true'] { background: var(--hud-pressed); border-color: var(--hud-accent); }
-  .flip { margin-left: auto; }
-  kbd { font: 11px ui-monospace, monospace; opacity: 0.6; margin-left: 6px; }
-  label.stepper, label.slider { display: inline-flex; align-items: center; gap: 6px; }
-  label.stepper input { width: 4.5em; text-align: center; }
-  label.slider input[type='range'] { width: 110px; }
-  output { min-width: 2.5em; font-variant-numeric: tabular-nums; }
+  #hud button:has(> svg:only-child) { padding: 0; }
+  #hud button[aria-pressed='true'], #hud button[aria-expanded='true'] { background: var(--pressed); color: var(--accent); }
+  @media (hover: hover) { #hud button:hover:not([aria-pressed='true'], [aria-expanded='true']) { background: var(--hover); } }
+  #hud button:active { transform: scale(0.96); }
+  #hud :is(button, input, .sv):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #hud input[type='number'], #hud input[type='text'] {
+    min-block-size: calc(var(--hit) - 0.4rem); padding: 0 0.5rem; border: 0; border-radius: 8px; background: var(--hover); text-align: center; box-sizing: border-box;
+  }
+  kbd { font: 11px ui-monospace, 'SF Mono', Menlo, monospace; color: var(--fg-dim); margin-inline-start: auto; padding-inline-start: 1.25rem; }
+  .sep { inline-size: 1px; align-self: stretch; margin-block: 0.4rem; background: var(--line); }
+  output { min-inline-size: 2.4em; text-align: end; color: var(--fg-dim); }
+
+  .stepper { display: inline-flex; align-items: center; gap: 2px; }
+  .stepper input { inline-size: 3.2em; }
+  label.slider { display: inline-flex; align-items: center; gap: 0.6rem; color: var(--fg-dim); }
+  label.slider input[type='range'] { inline-size: 7.5rem; }
+
+  /* ---- Range slider: native input, custom track/thumb, fill from --v/--min/--max (set inline by the component) ---- */
+  #hud input[type='range'] {
+    --track: 4px; --thumb: 16px; --progress: calc((var(--v, 0) - var(--min, 0)) / (var(--max, 100) - var(--min, 0)) * 100%);
+    appearance: none; background: transparent; margin: 0; padding: 0; border: 0; block-size: var(--hit); cursor: pointer;
+  }
+  #hud input[type='range']::-webkit-slider-runnable-track {
+    block-size: var(--track); border-radius: 99px;
+    background: linear-gradient(to right, var(--accent) var(--progress), color-mix(in oklab, var(--fg) 16%, transparent) var(--progress));
+  }
+  #hud input[type='range']::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; inline-size: var(--thumb); block-size: var(--thumb); margin-block-start: calc((var(--track) - var(--thumb)) / 2);
+    border: 0; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.18), 0 1px 4px rgb(0 0 0 / 0.35);
+  }
+  #hud input[type='range']::-moz-range-track { block-size: var(--track); border-radius: 99px; background: color-mix(in oklab, var(--fg) 16%, transparent); }
+  #hud input[type='range']::-moz-range-progress { block-size: var(--track); border-radius: 99px; background: var(--accent); }
+  #hud input[type='range']::-moz-range-thumb { inline-size: var(--thumb); block-size: var(--thumb); border: 0; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.18), 0 1px 4px rgb(0 0 0 / 0.35); }
+  #hud input.hue, #hud input.alpha { inline-size: 100%; }
+  #hud input.hue::-webkit-slider-runnable-track { background: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); block-size: 10px; }
+  #hud input.hue::-moz-range-track { background: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); block-size: 10px; }
+  #hud input.alpha::-webkit-slider-runnable-track { background: linear-gradient(90deg, transparent, var(--c)), repeating-conic-gradient(#bbb 0 25%, #fff 0 50%) 0 0 / 8px 8px; block-size: 10px; }
+  #hud input.alpha::-moz-range-track { background: linear-gradient(90deg, transparent, var(--c)), repeating-conic-gradient(#bbb 0 25%, #fff 0 50%) 0 0 / 8px 8px; block-size: 10px; }
+  #hud input.hue::-moz-range-progress, #hud input.alpha::-moz-range-progress { background: transparent; }
+
+  /* ---- Colour dot and swatches: checkerboard underneath so alpha reads ---- */
+  .colour, .strip button, .picker .row button {
+    --c: #000; --a: 1; position: relative; overflow: hidden; border-radius: 50%;
+    background: repeating-conic-gradient(#c9c9cf 0 25%, #fff 0 50%) 0 0 / 8px 8px; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.22);
+  }
+  .colour::after, .strip button::after, .picker .row button::after { content: ''; position: absolute; inset: 0; background: var(--c); opacity: var(--a); }
+  #hud .colour { border-radius: 50%; inline-size: 1.7rem; min-inline-size: 1.7rem; min-block-size: 1.7rem; block-size: 1.7rem; margin-inline: 0.35rem; box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.22), 0 0 0 2px var(--glass-solid), 0 0 0 3.5px var(--line); }
+  .strip { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px; }
+  #hud .strip button { inline-size: 1.6rem; block-size: 1.6rem; min-inline-size: 0; min-block-size: 0; border-radius: 8px; }
+  #hud .strip button[aria-selected='true'] { box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.22), 0 0 0 2px var(--glass-solid), 0 0 0 4px var(--accent); }
+
+  /* ---- Bars shared by proximity and floating modes ---- */
+  .bar, .subbar section { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 6px 10px; }
+  .subbar section + section { border-top: 1px solid var(--line); }
+  .subbar h2 { margin: 0 0.4rem 0 0; font-size: 11px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-dim); }
+
+  /* ---- Menus ---- */
   .menu { position: relative; }
   .popup {
-    position: absolute; top: calc(100% + 4px); left: 0; z-index: 4; min-width: 190px; display: grid; gap: 2px; padding: 6px;
-    background: var(--hud-bg); border: 1px solid var(--hud-line); border-radius: 8px; box-shadow: 0 6px 24px rgb(0 0 0 / 0.25);
+    background: color-mix(in oklab, var(--glass-solid) 94%, transparent);
+    position: absolute; inset-block-start: calc(100% + 8px); inset-inline-start: 0; z-index: 4; min-inline-size: 13rem; display: grid; gap: 1px; padding: 5px; border-radius: var(--radius);
+    transform-origin: top left;
   }
-  .popup label { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 4px; cursor: pointer; }
-  .popup label:hover { background: var(--hud-pressed); }
-  .popup kbd { margin-left: auto; }
-  .colour, .strip button, .picker .row button {
-    --c: #000; --a: 1;
-    background: linear-gradient(var(--c), var(--c)) padding-box, repeating-conic-gradient(#bbb 0 25%, #fff 0 50%) 0 0 / 8px 8px;
-    background-blend-mode: normal; position: relative;
+  .popup label { display: flex; align-items: center; gap: 0.6rem; min-block-size: 2.1rem; padding: 0 0.6rem; border-radius: 9px; cursor: pointer; }
+  .popup label:has(:checked) { background: var(--pressed); color: var(--accent); }
+  @media (hover: hover) { .popup label:hover:not(:has(:checked)) { background: var(--hover); } }
+  .popup input[type='radio'], .popup input[type='checkbox'] { accent-color: var(--accent); inline-size: 1rem; block-size: 1rem; margin: 0; }
+  @media (prefers-reduced-motion: no-preference) {
+    .popup { animation: pop 140ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+    @keyframes pop { from { opacity: 0; transform: scale(0.96) translateY(4px); } }
   }
-  .colour::after, .strip button::after, .picker .row button::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: var(--c); opacity: var(--a); }
-  .colour { width: 44px; height: 28px; }
-  .strip { display: flex; gap: 4px; flex-wrap: wrap; }
-  .strip button { width: 24px; height: 24px; padding: 0; min-height: 0; }
-  .strip button[aria-selected='true'] { outline: 2px solid var(--hud-accent); outline-offset: 1px; }
-  .picker { color: var(--hud-fg); background: var(--hud-bg); border: 1px solid var(--hud-line); border-radius: 10px; padding: 14px; width: 192px; font: 13px system-ui, sans-serif; }
-  .picker::backdrop { background: rgb(0 0 0 / 0.35); }
-  .picker label { display: grid; gap: 4px; margin-top: 10px; }
-  .picker .row { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0; }
-  .picker .row button { width: 20px; height: 20px; padding: 0; min-height: 0; }
-  .picker > button { width: 100%; }
-  .sv { position: relative; width: 160px; height: 160px; touch-action: none; cursor: crosshair; }
-  .sv canvas { display: block; width: 160px; height: 160px; border-radius: 4px; }
-  .sv i { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px #000; pointer-events: none; }
-  input.hue, input.alpha { appearance: none; height: 12px; border-radius: 6px; border: 1px solid var(--hud-line); }
-  input.hue::-webkit-slider-thumb, input.alpha::-webkit-slider-thumb { appearance: none; width: 8px; height: 16px; border-radius: 3px; background: #fff; border: 1px solid #000; }
-  input.hue::-moz-range-thumb, input.alpha::-moz-range-thumb { width: 8px; height: 16px; border-radius: 3px; background: #fff; border: 1px solid #000; }
-  input.hue { width: 100%; background: linear-gradient(90deg, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
-  input.alpha { width: 100%; background: linear-gradient(90deg, transparent, var(--c)); }
+
+  /* ---- Proximity mode (legacy top-edge reveal) ---- */
+  #hud-bars:not(.floating) { contain: layout style; border-radius: 0 0 var(--radius) var(--radius); padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); transition: opacity 120ms ease, transform 120ms ease; }
+  #hud-bars.docked { position: fixed; inset: 0 auto 0 0; inline-size: 150px; border-radius: 0; }
+  .flip { margin-inline-start: auto; }
+
+  /* ---- Floating toolbar, spec 8.3.2 ---- */
+  #hud-bars.floating {
+    position: fixed; z-index: 3; inline-size: max-content; max-inline-size: calc(100vw - 16px); display: flex; flex-direction: column; gap: 8px; align-items: stretch;
+    padding: 0; background: none; box-shadow: none; transition: opacity 160ms ease; pointer-events: auto;
+  }
+  #hud-bars.floating[data-edge='bottom'] { bottom: calc(14px + env(safe-area-inset-bottom)); }
+  #hud-bars.floating[data-edge='top'] { top: calc(14px + env(safe-area-inset-top)); flex-direction: column-reverse; }
+  #hud-bars.floating[data-edge='left'] { left: calc(14px + env(safe-area-inset-left)); }
+  #hud-bars.floating[data-edge='right'] { right: calc(14px + env(safe-area-inset-right)); }
+  .floating .pill { min-block-size: 44px; box-sizing: border-box; flex-wrap: nowrap; border-radius: 999px; padding: 4px 8px; gap: 2px; }
+  .floating[data-edge='left'] .pill, .floating[data-edge='right'] .pill { flex-direction: column; padding: 8px 4px; }
+  .floating[data-edge='left'] .sep, .floating[data-edge='right'] .sep { inline-size: auto; block-size: 1px; align-self: stretch; margin: 0.25rem 0.4rem; }
+  .floating .flyout { border-radius: var(--radius); max-inline-size: min(92vw, 640px); }
+  .floating .flyout .subbar { border: 0; }
+  .floating[data-edge='bottom'] .popup { inset-block-start: auto; inset-block-end: calc(100% + 10px); transform-origin: bottom left; }
+  .floating[data-edge='left'] .popup { inset-block-start: 0; inset-inline-start: calc(100% + 10px); }
+  .floating[data-edge='right'] .popup { inset-block-start: 0; inset-inline-start: auto; inset-inline-end: calc(100% + 10px); }
+  #hud .grip { cursor: grab; color: var(--fg-dim); min-inline-size: 1.5rem; touch-action: none; }
+  #hud .grip:active { cursor: grabbing; transform: none; }
+  .chip-label { font-weight: 560; max-inline-size: 7rem; overflow: hidden; text-overflow: ellipsis; }
+  .badge { min-inline-size: 1.15rem; block-size: 1.15rem; padding: 0 0.3rem; border-radius: 99px; background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 650; display: inline-grid; place-items: center; }
+  .floating.collapsed { flex-direction: row; }
+  #hud .dot { position: relative; inline-size: 14px; block-size: 14px; min-inline-size: 0; min-block-size: 0; padding: 0; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--glass-solid), var(--shadow); }
+  #hud .dot::before { content: ''; position: absolute; inset: -16px; } /* 44 px hit area around the 14 px dot */
+  .swatch-panel { position: fixed; z-index: 3; inset-inline-end: calc(14px + env(safe-area-inset-right)); inset-block-start: 50%; transform: translateY(-50%); pointer-events: auto; max-inline-size: min(260px, 40vw); border-radius: var(--radius); }
+  .swatch-panel .bar { padding: 10px; gap: 6px; }
+  #hud .swatch-panel .flip { display: none; }
+  .swatch-panel label.slider { flex: 1 1 100%; order: -1; }
+  .swatch-panel .strip { flex: 1 1 100%; }
+  .swatch-panel label.slider input[type='range'] { inline-size: 100%; }
+
+  /* ---- Colour picker dialog ---- */
+  .picker { color: var(--fg); inline-size: 15rem; padding: 14px; border-radius: 18px; border: 0; }
+  .picker::backdrop { background: rgb(0 0 0 / 0.32); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+  .picker label { display: grid; gap: 4px; margin-block-start: 12px; font-size: 12px; color: var(--fg-dim); }
+  .picker .row { display: flex; flex-wrap: wrap; gap: 6px; margin-block: 12px; }
+  #hud .picker .row button { inline-size: 1.35rem; block-size: 1.35rem; min-inline-size: 0; min-block-size: 0; padding: 0; }
+  #hud .picker > button { inline-size: 100%; background: var(--accent); color: var(--on-accent); font-weight: 600; }
+  @media (hover: hover) { #hud .picker > button:hover { background: color-mix(in oklab, var(--accent) 88%, var(--fg)); } }
+  .sv { position: relative; inline-size: 100%; aspect-ratio: 1; touch-action: none; cursor: crosshair; border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); }
+  .sv canvas { display: block; inline-size: 100%; block-size: 100%; }
+  .sv i { position: absolute; inline-size: 16px; block-size: 16px; margin: -8px 0 0 -8px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.4); pointer-events: none; }
+
+  @media (forced-colors: active) {
+    .glass, #hud-bars, .picker, .swatch-panel, .floating .pill, .floating .flyout, .popup { border: 1px solid CanvasText; background: Canvas; }
+    #hud button[aria-pressed='true'], #hud button[aria-expanded='true'] { outline: 2px solid Highlight; }
+  }
+  @media (prefers-reduced-motion: reduce) { #hud * { transition: none !important; } }
 }

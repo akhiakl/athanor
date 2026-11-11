@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'preact/hooks';
 import { colorRgba, rgbaColor, type App } from '../app/app';
 import { hsbToRgb } from '../core/color';
+import { Range } from './Hud';
 import type { Hud } from './hud';
 
 const SIZE = 160;
@@ -72,12 +73,10 @@ export function ColorPicker({ app, hud }: { app: App; hud: Hud }) {
         <i style={{ left: `${c.s * 100}%`, top: `${(1 - c.b) * 100}%` }} />
       </div>
       <label>Hue
-        <input type="range" class="hue" min={0} max={359} value={Math.round(c.h * 360) % 360}
-          onInput={(e) => app.setColor({ ...c, h: Number(e.currentTarget.value) / 360 })} />
+        <Range cls="hue" min={0} max={359} value={Math.round(c.h * 360) % 360} ariaLabel="Hue" onInput={(v) => app.setColor({ ...c, h: v / 360 })} />
       </label>
       <label>Alpha
-        <input type="range" class="alpha" min={0} max={255} value={c.a} style={{ '--c': `#${hex6(colorRgba(c))}` }}
-          onInput={(e) => app.setColor({ ...c, a: Number(e.currentTarget.value) })} />
+        <Range cls="alpha" min={0} max={255} value={c.a} ariaLabel="Alpha" vars={{ '--c': `#${hex6(colorRgba(c))}` }} onInput={(v) => app.setColor({ ...c, a: v })} />
       </label>
       <label>Hex
         <input type="text" value={hex6(colorRgba(c))} maxLength={7} spellcheck={false} onChange={onHex} />
