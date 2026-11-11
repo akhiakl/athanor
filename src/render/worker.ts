@@ -1,5 +1,6 @@
 // Render worker shell: forwards messages to RenderHost and drives its frames from the worker's own rAF.
 /// <reference lib="webworker" />
+import { IdbStorage, openDb } from '../doc/idb';
 import { RenderHost } from './host';
 import type { ToWorker } from './protocol';
 
@@ -15,6 +16,6 @@ function requestFrame(): void {
   });
 }
 
-const host = new RenderHost((m, t) => self.postMessage(m, t ?? []), requestFrame, { budgetMs: 4 });
+const host = new RenderHost((m, t) => self.postMessage(m, t ?? []), requestFrame, { budgetMs: 4, openStorage: async () => new IdbStorage(await openDb()) });
 self.onmessage = (e: MessageEvent<ToWorker>) => host.handle(e.data);
 self.postMessage({ type: 'alive' }); // handshake: the main thread transfers the canvas only after this

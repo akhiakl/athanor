@@ -3,6 +3,10 @@
 import type { CommittedStore } from './committed';
 import { RenderCore } from './core';
 import type { Ctx2D } from './draw';
+import { PagePersistence } from '../doc/persistence';
+import { applySegments } from '../doc/pageLog';
+import { PageSaver } from '../doc/saver';
+import type { Storage } from '../doc/storage';
 import type { MakeCanvas } from './export';
 import type { FromWorker, ToWorker } from './protocol';
 
@@ -19,6 +23,8 @@ export interface HostOptions {
   budgetMs: number;
   /** Creates the canvas a PNG export draws into (OffscreenCanvas in a worker and on the main thread alike). */
   makeCanvas?: MakeCanvas;
+  /** Opens document storage (IndexedDB) where the host runs. Without it, pages cannot be opened and nothing is saved. */
+  openStorage?: () => Promise<Storage>;
   /** Local mode: ack in the same call, since nothing is presented in between. Worker mode acks after the next frame. */
   ackImmediately?: boolean;
 }
@@ -30,6 +36,10 @@ export class RenderHost {
   private seed = 0;
   private acks: number[] = [];
   private lastHistory = { canUndo: false, canRedo: false };
+  private storage: Promise<Storage> | null = null;
+  private saver: PageSaver | null = null;
+  private opening = false;
+  private queued: ToWorker[] = [];
 
   constructor(
     private readonly post: (m: FromWorker, transfer?: Transferable[]) => void,
@@ -59,6 +69,14 @@ export class RenderHost {
     }
     const core = this.core;
     if (!core) return; // messages before init are dropped
+    if (this.opening) { // a page is loading: what follows belongs to it, so it waits its turn
+      this.queued.push(m);
+      return;
+    }
+    if (m.type === 'page') {
+      this.pageMessage(core, m);
+      return;
+    }
     // A throwing message must not kill the worker: the log lives only here, and an uncaught error would make the page
     // swap backends and lose the drawing. Report it and carry on. (init still throws, so a worker that cannot start falls back.)
     try {
@@ -105,6 +123,52 @@ export class RenderHost {
     }
     this.reportHistory(core);
     this.requestFrame();
+  }
+
+  private pageMessage(core: RenderCore, m: Extract<ToWorker, { type: 'page' }>): void {
+    if (m.op === 'flush') {
+      const saver = this.saver;
+      const answer = (): void => this.post({ type: 'pageFlushed', id: m.id, error: saver?.status === 'error' ? saver.lastError?.message ?? 'save failed' : undefined });
+      if (saver) void saver.flush().then(answer, answer);
+      else answer();
+      return;
+    }
+    this.opening = true;
+    this.openPage(core, m).then(
+      (empty) => this.finishOpen(core, { type: 'pageState', state: 'opened', pageId: m.pageId, empty }),
+      (err: unknown) => this.finishOpen(core, { type: 'pageState', state: 'error', pageId: m.pageId, message: err instanceof Error ? err.message : String(err) }),
+    );
+  }
+
+  /** Releases what arrived during the load into the new page first, then answers, so the caller may draw at once. */
+  private finishOpen(core: RenderCore, answer: FromWorker): void {
+    this.opening = false;
+    const queued = this.queued;
+    this.queued = [];
+    for (const q of queued) this.handle(q);
+    this.reportHistory(core);
+    this.post(answer);
+    this.requestFrame();
+  }
+
+  /** Loads the page; resolves with whether it was empty. */
+  private async openPage(core: RenderCore, m: Extract<ToWorker, { type: 'page'; op: 'open' }>): Promise<boolean> {
+    if (!this.opts.openStorage) throw new Error('storage is not available in this browser');
+    const storage = await (this.storage ??= this.opts.openStorage());
+    if (this.saver) { // the page being left is written out before the next one replaces it
+      await this.saver.flush();
+      this.saver.dispose();
+      this.saver = null;
+    }
+    core.resetPage();
+    const header = { width: m.width, height: m.height, background: m.background };
+    const persistence = new PagePersistence(storage, m.pageId, header);
+    const loaded = await persistence.load();
+    if (loaded) core.history.silently(() => applySegments(core.store, loaded.segments)); // loading is not an undoable edit
+    core.history.reset();
+    this.saver = new PageSaver(core.store, persistence, (state, err) => this.post({ type: 'pageState', state, message: err?.message }));
+    core.replay(Infinity);
+    return loaded === null;
   }
 
   private runExport(core: RenderCore, m: Extract<ToWorker, { type: 'export' }>): void {

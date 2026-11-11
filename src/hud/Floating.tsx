@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { affectMenu, colorRgba, createMenu, type App } from '../app/app';
 import { moduleUi } from '../app/controls';
 import { Menu, SubBar, SwatchBar } from './Hud';
-import { IconCollapse, IconFlask, IconGrip, IconLayers, IconMinus, IconPalette, IconPlus, IconSliders, IconDownload, IconPen, IconRedo, IconStyle, IconTrash, IconUndo } from './icons';
+import { IconCollapse, IconFlask, IconGrip, IconLayers, IconMinus, IconPalette, IconPlus, IconSliders, IconDownload, IconPages, IconPen, IconRedo, IconStyle, IconTrash, IconUndo } from './icons';
 import { affectHint, createHint, modLabel, shiftLabel } from './keys';
 import { isHoriz, nudge, placementStyle, snap } from './placement';
+import type { Pages } from '../app/pages';
 import type { Hud } from './hud';
 
 const hex = (rgba: number): string => `#${(rgba >>> 8).toString(16).padStart(6, '0')}`;
@@ -65,7 +66,7 @@ function useRoving(pill: { current: HTMLDivElement | null }, horiz: boolean) {
   };
 }
 
-export function FloatingView({ app, hud }: { app: App; hud: Hud }) {
+export function FloatingView({ app, hud, pages }: { app: App; hud: Hud; pages: Pages }) {
   const pos = hud.pos.value;
   const { edge } = pos;
   const drag = useRef<{ dx: number; dy: number } | null>(null);
@@ -218,6 +219,11 @@ export function FloatingView({ app, hud }: { app: App; hud: Hud }) {
         {sep}
         <button type="button" aria-disabled={!app.canUndo.value} aria-label="Undo" title={`Undo (${modLabel}Z)`} onClick={() => { if (app.canUndo.value) { app.run({ t: 'undo' }); hud.announce('Undo'); } }}><IconUndo /></button>
         <button type="button" aria-disabled={!app.canRedo.value} aria-label="Redo" title={`Redo (${modLabel}${shiftLabel}Z)`} onClick={() => { if (app.canRedo.value) { app.run({ t: 'redo' }); hud.announce('Redo'); } }}><IconRedo /></button>
+        <button
+          type="button" class="pagechip" aria-pressed={hud.pagesOpen.value} aria-label={`Pages, ${pages.index() + 1} of ${pages.pages.value.length}`}
+          title={pages.save.value === 'error' ? `Not saved: ${pages.saveMessage.value}` : pages.save.value === 'saving' ? 'Saving…' : `Pages (${modLabel}\\) · saved`}
+          data-save={pages.save.value} onClick={() => { hud.pagesOpen.value = !hud.pagesOpen.value; hud.persist(); }}
+        ><IconPages /><span class="chip-label">{pages.index() + 1}/{pages.pages.value.length}</span><i class="save-dot" aria-hidden="true" /></button>
         <button type="button" aria-haspopup="dialog" aria-label="Export" title={`Export (${modLabel}E)`} onClick={() => (hud.exportOpen.value = true)}><IconDownload /></button>
         {sep}
         <button

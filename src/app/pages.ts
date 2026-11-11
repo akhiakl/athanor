@@ -1,0 +1,137 @@
+// Pages controller: the open file's pages as signals, and the operations on them (spec 8.4). It talks to Docs for records and to the
+// render client for the open page's drawing, so a switch saves the page it leaves and loads the one it enters.
+import { signal } from '@preact/signals';
+import type { Docs, FileRecord, PageRecord } from '../doc/docs';
+import type { Engine } from '../engine/engine';
+import type { RenderClient } from '../render/client';
+
+const LAST_FILE = 'athanor.lastFile';
+
+const readLast = (): string | null => {
+  try {
+    return localStorage.getItem(LAST_FILE);
+  } catch {
+    return null; // private window or blocked storage: open the newest file instead
+  }
+};
+const writeLast = (id: string): void => {
+  try {
+    localStorage.setItem(LAST_FILE, id);
+  } catch { /* the file list still finds it */ }
+};
+
+export type SaveState = 'saved' | 'saving' | 'error';
+
+export function createPages(docs: Docs, client: RenderClient, engine: Engine, size: () => { w: number; h: number }, announce: (msg: string) => void) {
+  const file = signal<FileRecord | null>(null);
+  const pages = signal<PageRecord[]>([]);
+  const current = signal('');
+  const ready = signal(false);
+  const save = signal<SaveState>('saved');
+  const saveMessage = signal('');
+  let opening: Promise<void> = Promise.resolve();
+  let target = ''; // the page most recently asked for, so quick PageDown presses build on each other
+
+  client.onSave = (state, message) => {
+    save.value = state;
+    saveMessage.value = message ?? '';
+    if (state === 'error') announce(`Could not save: ${message ?? 'storage error'}. Your drawing is kept and will be retried.`);
+  };
+
+  const index = (): number => pages.value.findIndex((p) => p.id === current.value);
+
+  /** Shows a page: the drawing in progress is committed, the page being left is saved, and this one is loaded. */
+  function show(pageId: string): Promise<void> {
+    target = pageId;
+    // opens run one after another so rapid PageDown presses cannot interleave
+    opening = opening.then(async () => {
+      const page = pages.value.find((p) => p.id === pageId) ?? (await docs.getPage(pageId));
+      if (!page) return;
+      engine.commit(); // a stroke still in the arena belongs to the page being left
+      await client.openPage({ pageId: page.id, width: page.width, height: page.height, background: page.background });
+      current.value = page.id;
+      if (file.value) await docs.setLastPage(file.value.id, page.id);
+    });
+    return opening;
+  }
+
+  async function reload(): Promise<void> {
+    if (file.value) {
+      pages.value = await docs.pages(file.value.id);
+      file.value = (await docs.getFile(file.value.id)) ?? file.value;
+    }
+  }
+
+  /** Opens the last used file (or the newest, or a new one) at the page it was left on. */
+  async function boot(): Promise<void> {
+    const files = await docs.listFiles();
+    const last = readLast();
+    let f = files.find((x) => x.id === last) ?? files[0];
+    if (!f) {
+      const { w, h } = size();
+      f = (await docs.createFile('Untitled', w, h)).file;
+    }
+    file.value = f;
+    writeLast(f.id);
+    pages.value = await docs.pages(f.id);
+    await show(pages.value.find((p) => p.id === f.lastPageId)?.id ?? pages.value[0].id);
+    ready.value = true;
+  }
+
+  /** After the render side was replaced (the worker failed and the local host took over): load the page again. */
+  async function reopen(): Promise<void> {
+    if (current.value) await show(current.value);
+  }
+
+  async function add(): Promise<void> {
+    if (!file.value) return;
+    const p = await docs.addPage(file.value.id, current.value || undefined);
+    await reload();
+    await show(p.id);
+    announce(`Page ${index() + 1} of ${pages.value.length}`);
+  }
+
+  async function duplicate(id = current.value): Promise<void> {
+    await client.flushPage().catch(() => {}); // the copy must include what was just drawn; a failed save is already reported
+    const p = await docs.duplicatePage(id);
+    await reload();
+    await show(p.id);
+    announce('Page duplicated');
+  }
+
+  async function remove(id = current.value): Promise<void> {
+    if (pages.value.length <= 1) {
+      announce('A file needs at least one page');
+      return;
+    }
+    const wasCurrent = id === current.value;
+    const next = await docs.deletePage(id);
+    await reload();
+    if (wasCurrent) await show(next);
+    announce('Page deleted');
+  }
+
+  async function rename(id: string, name: string): Promise<void> {
+    await docs.renamePage(id, name);
+    await reload();
+  }
+
+  async function move(id: string, delta: number): Promise<void> {
+    const i = pages.value.findIndex((p) => p.id === id);
+    if (i < 0) return;
+    await docs.movePage(id, i + delta);
+    await reload();
+  }
+
+  /** PageDown / PageUp. Wraps nowhere: the ends do nothing. */
+  async function step(delta: number): Promise<void> {
+    const from = pages.value.findIndex((p) => p.id === (target || current.value));
+    const i = from + delta;
+    if (i < 0 || i >= pages.value.length) return;
+    await show(pages.value[i].id);
+    announce(`Page ${i + 1} of ${pages.value.length}`);
+  }
+
+  return { file, pages, current, ready, save, saveMessage, boot, reopen, show, add, duplicate, remove, rename, move, step, index };
+}
+export type Pages = ReturnType<typeof createPages>;

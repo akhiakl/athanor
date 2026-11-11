@@ -8,6 +8,7 @@ import type { Ctx2D } from './draw';
 import { RenderHost, type HostCanvas, type HostCtx } from './host';
 import type { Shape } from './batch';
 import type { FromWorker, ToWorker } from './protocol';
+import { MemoryStorage } from '../doc/storage';
 
 function mockCtx() {
   const calls: string[] = [];
@@ -25,7 +26,7 @@ function mockCtx() {
 }
 
 /** A worker stand-in: messages are structured-cloned with their transfer list, so detached buffers are real. */
-function rig(opts: { worker: boolean }) {
+function rig(opts: { worker: boolean; storage?: MemoryStorage }) {
   const ctx = mockCtx();
   const canvas: HostCanvas = { width: 0, height: 0, getContext: () => ctx };
   const sent: ToWorker[] = [];
@@ -33,7 +34,7 @@ function rig(opts: { worker: boolean }) {
   const changes = { n: 0 };
   let client!: RenderClient;
   const exportCanvas = { getContext: () => mockCtx() as never, convertToBlob: async (o?: { type?: string }) => new Blob(['png-bytes'], { type: o?.type }) };
-  const host = new RenderHost((m: FromWorker) => client.onMessage(m), () => {}, { budgetMs: 4, ackImmediately: !opts.worker, makeCanvas: () => exportCanvas });
+  const host = new RenderHost((m: FromWorker) => client.onMessage(m), () => {}, { budgetMs: 4, ackImmediately: !opts.worker, makeCanvas: () => exportCanvas, openStorage: opts.storage ? async () => opts.storage! : undefined });
   client = new RenderClient(
     (m, transfer) => {
       sent.push(m);
@@ -282,6 +283,95 @@ describe('export over the protocol', () => {
     const r = rig({ worker: true });
     (r.host as unknown as { opts: { makeCanvas?: unknown } }).opts.makeCanvas = () => { throw new Error('no canvas'); };
     await expect(r.client.export('png')).rejects.toThrow('no canvas');
+  });
+});
+
+const pageA = { pageId: 'A', width: 300, height: 200, background: 0xffffff };
+const pageB = { pageId: 'B', width: 300, height: 200, background: 0xffffff };
+
+describe('pages and autosave over the protocol', () => {
+  it('opens an empty page, saves a drawing, and restores it after switching away and back', async () => {
+    const mem = new MemoryStorage();
+    const { client, host } = rig({ worker: true, storage: mem });
+    expect(await client.openPage(pageA)).toEqual({ empty: true });
+    const e = new Engine(1, client);
+    e.select(shapes());
+    draw(e, 0);
+    draw(e, 50);
+    expect(host.store!.aliveCount).toBe(2);
+    expect(await client.openPage(pageB)).toEqual({ empty: true }); // page A is flushed on the way out
+    expect(host.store!.aliveCount).toBe(0);
+    expect((await mem.blobKeys('p:A:')).length).toBeGreaterThan(0);
+    expect(await client.openPage(pageA)).toEqual({ empty: false });
+    expect(host.store!.aliveCount).toBe(2);
+  });
+  it('loading a page is not an undoable edit, and history starts clean', async () => {
+    const mem = new MemoryStorage();
+    const { client } = rig({ worker: true, storage: mem });
+    const states: string[] = [];
+    client.onHistory = (u, r) => void states.push(`${u}/${r}`);
+    await client.openPage(pageA);
+    const e = new Engine(1, client);
+    e.select(shapes());
+    draw(e);
+    await client.openPage(pageB);
+    await client.openPage(pageA);
+    expect(states.at(-1)).toBe('false/false'); // nothing to undo right after a load
+  });
+  it('reports saving then saved, and flushPage writes at once', async () => {
+    const mem = new MemoryStorage();
+    const { client } = rig({ worker: true, storage: mem });
+    const seen: string[] = [];
+    client.onSave = (s) => void seen.push(s);
+    await client.openPage(pageA);
+    const e = new Engine(1, client);
+    e.select(shapes());
+    draw(e);
+    await client.flushPage();
+    expect(seen).toEqual(['saving', 'saved']);
+    expect((await mem.blobKeys('p:A:log:')).length).toBe(1);
+  });
+  it('a failed write is reported and retried, not lost', async () => {
+    const mem = new MemoryStorage();
+    const { client } = rig({ worker: true, storage: mem });
+    const seen: string[] = [];
+    client.onSave = (s) => void seen.push(s);
+    await client.openPage(pageA);
+    const e = new Engine(1, client);
+    e.select(shapes());
+    mem.failWrites = true;
+    draw(e);
+    await expect(client.flushPage()).rejects.toThrow('quota');
+    expect(seen.at(-1)).toBe('error');
+    mem.failWrites = false;
+    await client.flushPage();
+    expect(seen.at(-1)).toBe('saved');
+    expect(await client.openPage(pageB)).toEqual({ empty: true });
+    expect(await client.openPage(pageA)).toEqual({ empty: false }); // the drawing survived the failed write
+  });
+  it('flushPage with nothing open or nothing pending still answers', async () => {
+    const { client } = rig({ worker: true, storage: new MemoryStorage() });
+    await expect(client.flushPage()).resolves.toBeUndefined(); // no page open yet
+    await client.openPage(pageA);
+    await expect(client.flushPage()).resolves.toBeUndefined(); // nothing changed
+  });
+  it('commits sent while a page is loading land on the new page', async () => {
+    const mem = new MemoryStorage();
+    const { client, host } = rig({ worker: true, storage: mem });
+    await client.openPage(pageA);
+    const e = new Engine(1, client);
+    e.select(shapes());
+    draw(e);
+    const opening = client.openPage(pageB);
+    draw(e, 60); // sent before the load finished
+    await opening;
+    expect(host.store!.aliveCount).toBe(1);
+    await client.openPage(pageA);
+    expect(host.store!.aliveCount).toBe(1); // page A kept only its own stroke
+  });
+  it('rejects when the host has no storage', async () => {
+    const { client } = rig({ worker: true });
+    await expect(client.openPage(pageA)).rejects.toThrow('storage');
   });
 });
 

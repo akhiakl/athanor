@@ -4,6 +4,7 @@ import { moduleUi, type ControlSpec } from '../app/controls';
 import type { Hud } from './hud';
 import { ColorPicker } from './ColorPicker';
 import { ExportDialog } from './ExportDialog';
+import { PagesPanel } from './PagesPanel';
 import { FloatingView } from './Floating';
 import type { ExportContext } from './mount';
 import { affectHint, createHint } from './keys';
@@ -219,8 +220,9 @@ export function HudView({ app, hud, exp }: { app: App; hud: Hud; exp: ExportCont
   return (
     <>
       <div class="sr-only" role="status" aria-live="polite">{hud.announcement.value}</div>
-      {hud.mode.value === 'floating' ? <FloatingView app={app} hud={hud} /> : <ProximityView app={app} hud={hud} />}
+      {hud.mode.value === 'floating' ? <FloatingView app={app} hud={hud} pages={exp.pages} /> : <ProximityView app={app} hud={hud} />}
       <ColorPicker app={app} hud={hud} />
+      <PagesPanel pages={exp.pages} hud={hud} />
       <ExportDialog app={app} hud={hud} client={exp.client} size={exp.size} dpr={exp.dpr} />
     </>
   );

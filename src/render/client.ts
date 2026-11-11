@@ -18,12 +18,17 @@ export class RenderClient implements CommitSink {
   onRepeatClone: ((shape: Shape) => void) | null = null;
   onRepeatCommit: (() => void) | null = null;
   /** What undo and redo can do, whenever it changes. */
+  /** Autosave status of the open page. */
+  onSave: ((state: 'saving' | 'saved' | 'error', message?: string) => void) | null = null;
   onHistory: ((canUndo: boolean, canRedo: boolean) => void) | null = null;
 
   private hover_ = new Float32Array(HOVER_MAX * 3);
   private hoverN = 0;
   private affectsOn = new Set<string>();
   private nextExport = 1;
+  private nextFlush = 1;
+  private readonly flushes = new Map<number, { resolve(): void; reject(e: Error): void }>();
+  private readonly opens = new Map<string, { resolve(r: { empty: boolean }): void; reject(e: Error): void }>();
   private readonly exports = new Map<number, { resolve(b: Blob): void; reject(e: Error): void }>();
 
   /**
@@ -44,7 +49,18 @@ export class RenderClient implements CommitSink {
     else if (m.type === 'error') console.error(`render worker: ${m.message}`);
     else if (m.type === 'repeatClone') for (const s of unpackBatch(m.buffer)) this.onRepeatClone?.(s);
     else if (m.type === 'repeatCommit') this.onRepeatCommit?.();
-    else if (m.type === 'historyState') this.onHistory?.(m.canUndo, m.canRedo);
+    else if (m.type === 'pageState') {
+      const open = m.pageId ? this.opens.get(m.pageId) : undefined;
+      if (open && m.pageId) this.opens.delete(m.pageId);
+      if (m.state === 'opened') open?.resolve({ empty: m.empty ?? true });
+      else if (m.state === 'error' && open) open.reject(new Error(m.message ?? 'could not open the page'));
+      else this.onSave?.(m.state, m.message);
+    } else if (m.type === 'pageFlushed') {
+      const f = this.flushes.get(m.id);
+      this.flushes.delete(m.id);
+      if (m.error) f?.reject(new Error(m.error));
+      else f?.resolve();
+    } else if (m.type === 'historyState') this.onHistory?.(m.canUndo, m.canRedo);
     else if (m.type === 'exportResult' || m.type === 'exportError') {
       const p = this.exports.get(m.id);
       this.exports.delete(m.id);
@@ -116,6 +132,27 @@ export class RenderClient implements CommitSink {
     return new Promise((resolve, reject) => {
       this.exports.set(id, { resolve, reject });
       this.send({ type: 'export', id, format, scale, transparent });
+    });
+  }
+
+  /**
+   * Opens a page: the render side saves the page it was showing, loads this one and answers. Resolves with whether the page was
+   * empty. Commits sent meanwhile are held until the page is loaded, so they land on the right page.
+   */
+  openPage(page: { pageId: string; width: number; height: number; background: number }): Promise<{ empty: boolean }> {
+    this.dropPending(); // shapes in flight belonged to the page being left
+    return new Promise((resolve, reject) => {
+      this.opens.set(page.pageId, { resolve, reject });
+      this.send({ type: 'page', op: 'open', ...page });
+    });
+  }
+
+  /** Writes pending changes now. Resolves once they are stored; rejects if the write failed (the data stays queued for retry). */
+  flushPage(): Promise<void> {
+    const id = this.nextFlush++;
+    return new Promise((resolve, reject) => {
+      this.flushes.set(id, { resolve, reject });
+      this.send({ type: 'page', op: 'flush', id });
     });
   }
 
