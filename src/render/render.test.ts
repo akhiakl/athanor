@@ -101,23 +101,24 @@ describe('MainThreadRenderCore + Engine', () => {
     const active = new ActiveRenderer();
     stroke(e, [[0, 0, 0], [30, 0, 8]]);
     // nothing committed yet?  up is the last point, so finished:
-    expect(core.log).toHaveLength(1);
+    expect(core.store.aliveCount).toBe(1);
     expect(committed.calls).toContain('stroke');
     active.render(activeCtx, e); // nothing active and nothing previous: no work
     expect(activeCtx.calls).toHaveLength(0);
   });
   it('clear and redraw replay the log over the background', () => {
     const ctx = mockCtx();
-    const core = new MainThreadRenderCore(ctx, '#fff', 100, 50);
+    const core = new MainThreadRenderCore(ctx, '#fff');
+    core.store.setSize(100, 50);
     const e = new Engine(1, core);
     e.select(shapes());
     stroke(e, [[0, 0, 0], [30, 0, 8]]);
     ctx.calls.length = 0;
-    core.redraw(200, 100);
-    expect(ctx.calls[0]).toBe('fillRect(0,0,200,100)');
+    core.resize(200, 100);
+    expect(ctx.calls).toContain('fillRect(0,0,200,100)');
     expect(ctx.calls).toContain('stroke');
     core.clear();
-    expect(core.log).toHaveLength(0);
+    expect(core.store.aliveCount).toBe(0);
   });
 });
 

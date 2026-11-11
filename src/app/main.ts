@@ -3,6 +3,7 @@
 import { InputRing, KIND_MOUSE, KIND_PEN, KIND_TOUCH, META_COALESCED, META_HW_PRESSURE, PHASE_CANCEL, PHASE_DOWN, PHASE_MOVE, PHASE_UP, packMeta } from '../core/inputRing';
 import { Engine } from '../engine/engine';
 import { createModules } from '../modules/registry';
+import { limitAffect, randomAffect, smoothAffect } from '../render/affects';
 import { ActiveRenderer } from '../render/active';
 import { MainThreadRenderCore } from '../render/core';
 
@@ -43,7 +44,7 @@ function resize(): void {
     c.height = Math.round(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
-  core.redraw(w, h);
+  core.resize(w, h);
   request();
 }
 
@@ -57,8 +58,10 @@ function request(): void {
 function frame(): void {
   scheduled = false;
   engine.tick(ring);
+  core.tick(engine.createCount);
   active.render(activeCtx, engine);
-  if (down) request(); // idle when no stroke is active (2.3 step 7)
+  const pending = core.replay(2); // main-thread fallback budget: 2 ms per frame (7.2)
+  if (down || pending > 0) request(); // idle when no stroke is active (2.3 step 7)
 }
 
 function write(ev: PointerEvent, phase: number, extra = 0): void {
@@ -78,7 +81,15 @@ stage.addEventListener('pointerdown', (ev) => {
   request();
 });
 stage.addEventListener('pointermove', (ev) => {
-  if (!down || !ev.isPrimary) return;
+  if (!ev.isPrimary) return;
+  if (!down) {
+    // hover (buttons 0) feeds the committed-domain affects directly
+    if (core.affects.length > 0) {
+      core.hover(ev.clientX - originX, ev.clientY - originY, ev.timeStamp - epoch);
+      request();
+    }
+    return;
+  }
   const list = ev.getCoalescedEvents?.() ?? [];
   if (list.length > 1) for (const c of list) write(c, PHASE_MOVE, META_COALESCED);
   else write(ev, PHASE_MOVE);
@@ -93,11 +104,25 @@ const end = (phase: number) => (ev: PointerEvent) => {
 stage.addEventListener('pointerup', end(PHASE_UP));
 stage.addEventListener('pointercancel', end(PHASE_CANCEL));
 
+// dev-only toggles for the committed affects: R random, S smooth, L limit
+const toggles: Record<string, string | undefined> = { r: 'affect.random', s: 'affect.smooth', l: 'affect.limit' };
+const makers: Record<string, () => (typeof core.affects)[number]> = {
+  'affect.random': () => randomAffect(seed),
+  'affect.smooth': () => smoothAffect(),
+  'affect.limit': () => limitAffect(),
+};
+function toggle(id: string): void {
+  const i = core.affects.findIndex((a) => a.id === id);
+  if (i >= 0) core.affects.splice(i, 1);
+  else core.affects.push(makers[id]());
+}
+
 window.addEventListener('keydown', (ev) => {
   if (down || ev.ctrlKey || ev.metaKey || ev.altKey) return;
   const n = Number(ev.key);
   if (n >= 1 && n <= createModules.length) engine.select(createModules[n - 1].make());
   else if (ev.key.toLowerCase() === 'c') core.clear();
+  else if (toggles[ev.key.toLowerCase()]) toggle(toggles[ev.key.toLowerCase()]!);
 });
 
 new ResizeObserver(resize).observe(stage);
