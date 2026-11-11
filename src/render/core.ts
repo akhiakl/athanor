@@ -18,7 +18,12 @@ export class MainThreadRenderCore implements CommitSink {
       this.store.add(s);
       drawShape(this.ctx, s); // appended on top: drawn directly, no replay needed
     }
-    for (const af of this.affects) af.committed?.(this.store, 0);
+    for (const af of this.affects) af.committed?.(this.store);
+  }
+
+  /** Once per frame: committed affects that depend on in-flight shapes (Limit) see the active count. */
+  tick(activeCount: number): void {
+    for (const af of this.affects) af.tick?.(this.store, activeCount);
   }
 
   /** Hover sample (buttons 0) for the committed-domain affects. */

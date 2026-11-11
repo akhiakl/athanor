@@ -58,6 +58,7 @@ function request(): void {
 function frame(): void {
   scheduled = false;
   engine.tick(ring);
+  core.tick(engine.createCount);
   active.render(activeCtx, engine);
   const pending = core.replay(2); // main-thread fallback budget: 2 ms per frame (7.2)
   if (down || pending > 0) request(); // idle when no stroke is active (2.3 step 7)

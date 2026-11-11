@@ -59,6 +59,18 @@ export class CommittedStore {
     for (let t = 0; t < this.tiles.length; t++) this.dirty.add(t);
   }
 
+  /** Tile lists stay ascending (= log order, so z-order) and unique, however often a shape moves. */
+  private insert(t: number, id: number): void {
+    const list = this.tiles[t];
+    let lo = 0, hi = list.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (list[mid] < id) lo = mid + 1;
+      else hi = mid;
+    }
+    if (list[lo] !== id) list.splice(lo, 0, id);
+  }
+
   private range(e: Entry): void {
     const T = this.tile;
     e.tx0 = Math.max(0, Math.floor(e.bb[0] / T));
@@ -70,7 +82,7 @@ export class CommittedStore {
   private register(id: number, e: Entry): void {
     shapeBBox(e.shape, e.bb);
     this.range(e);
-    for (let ty = e.ty0; ty <= e.ty1; ty++) for (let tx = e.tx0; tx <= e.tx1; tx++) this.tiles[ty * this.cols + tx].push(id);
+    for (let ty = e.ty0; ty <= e.ty1; ty++) for (let tx = e.tx0; tx <= e.tx1; tx++) this.insert(ty * this.cols + tx, id);
   }
 
   private dirtyRange(tx0: number, ty0: number, tx1: number, ty1: number): void {
@@ -104,11 +116,9 @@ export class CommittedStore {
     this.range(e);
     this.dirtyRange(tx0, ty0, tx1, ty1);
     this.dirtyRange(e.tx0, e.ty0, e.tx1, e.ty1);
-    for (let ty = e.ty0; ty <= e.ty1; ty++) {
-      for (let tx = e.tx0; tx <= e.tx1; tx++) {
-        if (tx < tx0 || tx > tx1 || ty < ty0 || ty > ty1) this.tiles[ty * this.cols + tx].push(id);
-      }
-    }
+    // Old tiles keep the id (stale but harmless: replay and hit re-check the bbox); the new range is
+    // inserted in sorted position, so there are never duplicates and z-order matches the log.
+    for (let ty = e.ty0; ty <= e.ty1; ty++) for (let tx = e.tx0; tx <= e.tx1; tx++) this.insert(ty * this.cols + tx, id);
   }
 
   /** Oldest still-alive id, or -1. */

@@ -10,8 +10,10 @@ export interface CommittedAffect {
   readonly id: string;
   /** Hover sample (buttons 0), canvas space. */
   hover?(store: CommittedStore, x: number, y: number, t: number): void;
-  /** After each commit. `activeCount` = shapes still in create[] + affect[] on the main thread. */
-  committed?(store: CommittedStore, activeCount: number): void;
+  /** After each commit (the active arena was just flushed, so nothing is in flight). */
+  committed?(store: CommittedStore): void;
+  /** Once per frame with the number of shapes still in create[] + affect[] on the main thread. */
+  tick?(store: CommittedStore, activeCount: number): void;
 }
 
 /** Random (5.4.2): jitters the segments of the hit shape near the pointer. Uniform only; shortcut: no Gaussian pref yet. */
@@ -113,19 +115,17 @@ export function smoothAffect({ repeat = false, throttleMs = 75 } = {}): Committe
 
 /** Limit (5.4.6): keeps total shapes near `limit` by removing the oldest committed ones. */
 export function limitAffect({ limit = 10 } = {}): CommittedAffect {
-  return {
-    id: 'affect.limit',
-    committed(store, activeCount) {
-      const alive = store.aliveCount;
-      const total = alive + activeCount;
-      if (total <= limit || alive === 0) return;
-      const r = total - limit;
-      const end = r > alive ? alive - 1 : r;
-      for (let k = 0; k < Math.max(1, end); k++) {
-        const id = store.oldestAlive();
-        if (id < 0) break;
-        store.remove(id);
-      }
-    },
+  const run = (store: CommittedStore, activeCount: number): void => {
+    const alive = store.aliveCount;
+    const total = alive + activeCount;
+    if (total <= limit || alive === 0) return;
+    const r = total - limit;
+    const end = r > alive ? alive - 1 : r;
+    for (let k = 0; k < Math.max(1, end); k++) {
+      const id = store.oldestAlive();
+      if (id < 0) break;
+      store.remove(id);
+    }
   };
+  return { id: 'affect.limit', committed: (store) => run(store, 0), tick: run };
 }

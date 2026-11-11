@@ -96,6 +96,32 @@ describe('CommittedStore', () => {
   });
 });
 
+describe('tile membership under repeated touch', () => {
+  const shift = (st: CommittedStore, id: number, dx: number) => {
+    const v = st.entries[id].shape.vtx;
+    for (let i = 0; i < v.length; i += 2) v[i] += dx;
+    st.touch(id);
+  };
+  it('never duplicates an id when a shape moves back and forth across a tile boundary', () => {
+    const st = new CommittedStore(256, 600, 600);
+    const id = st.add(square(240, 10, 12));
+    for (let k = 0; k < 4; k++) { shift(st, id, 300); shift(st, id, -300); }
+    for (let t = 0; t < st.cols * st.rows; t++) {
+      const ids = st.tileIds(t);
+      expect(new Set(ids).size).toBe(ids.length);
+    }
+  });
+  it('keeps log order, so a touched older shape stays below newer ones', () => {
+    const st = new CommittedStore(256, 600, 600);
+    const older = st.add(square(240, 10, 12));
+    const newer = st.add(square(241, 11, 10));
+    shift(st, older, 300);
+    shift(st, older, -300);
+    for (let t = 0; t < st.cols * st.rows; t++) expect([...st.tileIds(t)]).toEqual([...st.tileIds(t)].sort((a, b) => a - b));
+    expect(st.hit(246, 16)).toBe(newer);
+  });
+});
+
 describe('Random', () => {
   it('jitters segments in the cross band within +-0.15 v, never the MOVE point', () => {
     const st = new CommittedStore(256, 600, 600);
@@ -163,19 +189,20 @@ describe('Limit', () => {
   };
   it('removes the oldest shapes down to the limit', () => {
     const st = fill(15);
-    limitAffect({ limit: 10 }).committed!(st, 0);
+    limitAffect({ limit: 10 }).committed!(st);
     expect(st.aliveCount).toBe(10);
     expect(st.entries.slice(0, 5).every((e) => !e.alive)).toBe(true);
     expect(st.entries[5].alive).toBe(true);
   });
   it('counts active shapes toward the total and removes at least one over the limit', () => {
     const st = fill(10);
-    limitAffect({ limit: 10 }).committed!(st, 1);
+    limitAffect({ limit: 10 }).tick!(st, 1);
     expect(st.aliveCount).toBe(9);
   });
   it('never removes anything at or under the limit', () => {
     const st = fill(10);
-    limitAffect({ limit: 10 }).committed!(st, 0);
+    limitAffect({ limit: 10 }).committed!(st);
+    limitAffect({ limit: 10 }).tick!(st, 0);
     expect(st.aliveCount).toBe(10);
   });
 });
