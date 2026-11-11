@@ -18,6 +18,13 @@
     font: 13px/1.35 system-ui, -apple-system, 'Segoe UI', sans-serif; color: var(--fg); font-variant-numeric: tabular-nums;
   }
   @media (pointer: coarse) { #hud { --hit: 2.75rem; } }
+  #hud ::selection { background: color-mix(in oklab, var(--accent) 35%, transparent); }
+  #hud input { caret-color: var(--accent); accent-color: var(--accent); }
+  #hud input[type='number'] { appearance: textfield; -moz-appearance: textfield; }
+  #hud input[type='number']::-webkit-inner-spin-button, #hud input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  #hud ::-webkit-scrollbar { inline-size: 8px; block-size: 8px; }
+  #hud ::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--fg) 25%, transparent); border-radius: 99px; }
+  #hud { scrollbar-width: thin; scrollbar-color: color-mix(in oklab, var(--fg) 25%, transparent) transparent; }
 
   /* ---- Surfaces ---- */
   .glass, #hud-bars:not(.floating), .picker, .swatch-panel, .floating .pill, .floating .flyout, .popup {
@@ -95,7 +102,7 @@
   .popup {
     background: color-mix(in oklab, var(--glass-solid) 94%, transparent);
     position: absolute; inset-block-start: calc(100% + 8px); inset-inline-start: 0; z-index: 4; min-inline-size: 13rem; display: grid; gap: 1px; padding: 5px; border-radius: var(--radius);
-    transform-origin: top left;
+    transform-origin: top left; max-block-size: min(70dvh, 28rem); overflow-y: auto; overscroll-behavior: contain;
   }
   .popup label { display: flex; align-items: center; gap: 0.6rem; min-block-size: 2.1rem; padding: 0 0.6rem; border-radius: 9px; cursor: pointer; }
   .popup label:has(:checked) { background: var(--pressed); color: var(--accent); }
@@ -141,6 +148,15 @@
   .swatch-panel label.slider { flex: 1 1 100%; order: -1; }
   .swatch-panel .strip { flex: 1 1 100%; }
   .swatch-panel label.slider input[type='range'] { inline-size: 100%; }
+
+  /* Narrow viewports: the pill wraps to two rows and the menu chips drop to icons so nothing is clipped */
+  @media (max-width: 36rem) {
+    #hud-bars.floating[data-edge='bottom'], #hud-bars.floating[data-edge='top'] { inline-size: calc(100vw - 16px); max-inline-size: none; left: 8px !important; right: 8px; transform: none !important; }
+    .floating[data-edge='bottom'] .pill, .floating[data-edge='top'] .pill { flex-wrap: wrap; justify-content: center; border-radius: 26px; padding: 6px 8px; }
+    .floating .pill .chip-label, .floating .pill .sep { display: none; }
+    .floating .flyout { max-inline-size: none; }
+    .swatch-panel { inset-inline-end: 8px; max-inline-size: min(260px, 60vw); }
+  }
 
   /* ---- Colour picker dialog ---- */
   .picker { color: var(--fg); inline-size: 15rem; padding: 14px; border-radius: 18px; border: 0; }
