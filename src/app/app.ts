@@ -60,7 +60,7 @@ export function createApp(engine: Engine, client: RenderClient, stamps: ReturnTy
 
   function setColor(c: Color): void {
     const next: [Color, Color] = [colors.value[0], colors.value[1]];
-    next[slot.value] = alphaLock.value ? { ...c, a: color.value.a } : c;
+    next[slot.value] = c;
     colors.value = next;
     sync();
   }
@@ -151,7 +151,8 @@ export function createApp(engine: Engine, client: RenderClient, stamps: ReturnTy
     const rgba = swatches.value[i];
     if (rgba === undefined) return;
     swatchIndex.value = i;
-    setColor(rgbaColor(rgba)); // applies the swatch alpha unless alpha is locked
+    // the lock only stops the swatch's own alpha from applying; the alpha controls still work while it is on
+    setColor(rgbaColor(rgba, alphaLock.value ? color.value.a : undefined));
   }
 
   function setAlpha(a: number): void {

@@ -6,7 +6,7 @@ import { PHASE_DOWN, PHASE_MOVE, PHASE_UP, InputRing, KIND_MOUSE, packMeta } fro
 import { CaptureSink } from '../test/helpers';
 import { affectMenu, colorRgba, createApp, rgbaColor } from './app';
 import { defaultValues, toParams } from './controls';
-import { matchShortcut } from './shortcuts';
+import { isTextEntry, matchShortcut } from './shortcuts';
 import type { RenderClient } from '../render/client';
 
 const none = { mod: false, shift: false, alt: false };
@@ -40,6 +40,21 @@ describe('shortcut map (1.3.1)', () => {
   it('leaves Blindness R and Repeat B to the modules', () => {
     expect(matchShortcut('KeyR', none)).toBeNull();
     expect(matchShortcut('KeyB', none)).toBeNull();
+  });
+});
+
+describe('typing targets', () => {
+  it('suppresses hotkeys only for text-like fields', () => {
+    expect(isTextEntry({ tagName: 'INPUT', type: 'text' })).toBe(true);
+    expect(isTextEntry({ tagName: 'INPUT', type: 'number' })).toBe(true);
+    expect(isTextEntry({ tagName: 'TEXTAREA' })).toBe(true);
+    expect(isTextEntry({ tagName: 'SELECT' })).toBe(true);
+    expect(isTextEntry({ tagName: 'DIV', isContentEditable: true })).toBe(true);
+  });
+  it('keeps hotkeys alive after a checkbox, radio, slider or button', () => {
+    for (const type of ['checkbox', 'radio', 'range', 'button']) expect(isTextEntry({ tagName: 'INPUT', type })).toBe(false);
+    expect(isTextEntry({ tagName: 'BUTTON' })).toBe(false);
+    expect(isTextEntry(null)).toBe(false);
   });
 });
 
@@ -126,6 +141,16 @@ describe('app controller', () => {
     app.alphaLock.value = false;
     app.pickSwatch(2);
     expect(e.attrs.rgba & 255).toBe(255);
+  });
+  it('alpha controls still work while alpha is locked', () => {
+    const { e, app } = setup();
+    app.alphaLock.value = true;
+    app.setAlpha(100);
+    expect(e.attrs.rgba & 255).toBe(100);
+    app.run({ t: 'alpha', d: -10 });
+    expect(e.attrs.rgba & 255).toBe(90);
+    app.setColor({ ...app.color.value, a: 40 }); // the picker's alpha strip
+    expect(e.attrs.rgba & 255).toBe(40);
   });
   it('X switches to the background colour and back; Shift+X swaps slots', () => {
     const { e, app } = setup();

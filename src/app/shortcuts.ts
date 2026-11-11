@@ -53,3 +53,16 @@ export function matchShortcut(code: string, { mod, shift, alt }: Mods): Action |
     default: return null;
   }
 }
+
+const TEXT_INPUT = /^(text|number|search|tel|url|email|password)$/;
+
+/**
+ * True when the event target takes typed text (or arrow keys for a list), so hotkeys must stay out of the way.
+ * Checkboxes, radios, buttons and range sliders are not: after using one, focus stays on it and shortcuts must keep working.
+ */
+export function isTextEntry(t: { tagName?: string; type?: string; isContentEditable?: boolean } | null): boolean {
+  if (!t) return false;
+  if (t.isContentEditable) return true;
+  if (t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return true;
+  return t.tagName === 'INPUT' && TEXT_INPUT.test(t.type ?? 'text');
+}

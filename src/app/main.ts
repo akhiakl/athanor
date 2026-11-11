@@ -13,7 +13,7 @@ import { RenderHost } from '../render/host';
 import type { FromWorker } from '../render/protocol';
 import { Transport } from '../render/transport';
 import { createApp } from './app';
-import { isMac, matchShortcut } from './shortcuts';
+import { isMac, isTextEntry, matchShortcut } from './shortcuts';
 import { lockViewport } from './viewport';
 
 const stage = document.getElementById('stage') as HTMLElement;
@@ -249,10 +249,9 @@ stage.addEventListener('pointercancel', end(PHASE_CANCEL));
 stage.addEventListener('lostpointercapture', end(PHASE_CANCEL)); // capture lost mid-stroke = commit (6.4)
 
 const mac = isMac();
-const isTextEntry = (t: EventTarget | null): boolean => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 
 window.addEventListener('keydown', (ev) => {
-  if (isTextEntry(ev.target)) return;
+  if (isTextEntry(ev.target as HTMLElement | null)) return;
   const mod = mac ? ev.metaKey : ev.ctrlKey;
   const a = matchShortcut(ev.code, { mod, shift: ev.shiftKey, alt: ev.altKey });
   if (a) {
