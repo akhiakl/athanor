@@ -5,10 +5,15 @@ import type { AffectModule } from '../../engine/engine';
 
 /**
  * Mirror, spec 5.4.1: reflects every create record across a vertical axis (horizontal flag, default on) and/or a horizontal
- * axis (vertical flag), into fixed slots of its own affect range. shortcut: no axis-move mode or crosshair guide yet (needs the
- * guide layer); `setAxis` is there for it.
+ * axis (vertical flag), into fixed slots of its own affect range. The page moves the axes through `setAxis` (axis-move mode).
  */
-export function mirror({ horizontal = true, vertical = false } = {}): AffectModule & { setAxis(x: number, y: number): void } {
+export interface MirrorModule extends AffectModule {
+  setAxis(x: number, y: number): void;
+  /** Current axes; NaN until the first affect pass centres them. */
+  axis(): [number, number];
+}
+
+export function mirror({ horizontal = true, vertical = false } = {}): MirrorModule {
   let ax = NaN;
   let by = NaN;
   const k = (horizontal ? 1 : 0) + (vertical ? 1 : 0) + (horizontal && vertical ? 1 : 0);
@@ -19,10 +24,11 @@ export function mirror({ horizontal = true, vertical = false } = {}): AffectModu
     if (vertical) mats.push([1, 0, 0, -1, 0, 2 * by]);
     if (horizontal && vertical) mats.push([-1, 0, 0, -1, 2 * ax, 2 * by]);
   };
-  const self: AffectModule & { setAxis(x: number, y: number): void } = {
+  const self: MirrorModule = {
     id: 'affect.mirror',
     order: 2,
     rateSensitive: false,
+    axis: () => [ax, by],
     setAxis(x, y) {
       ax = x;
       by = y;

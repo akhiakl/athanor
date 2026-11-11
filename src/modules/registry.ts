@@ -15,7 +15,7 @@ export interface ModuleDescriptor {
   readonly id: string;
   readonly kind: 'create';
   readonly order: number;
-  make(): CreateModule;
+  make(params?: Record<string, number | boolean>): CreateModule;
 }
 
 export const createModules: readonly ModuleDescriptor[] = [
@@ -30,7 +30,7 @@ export interface AffectDescriptor {
   readonly id: string;
   readonly kind: 'affect';
   readonly order: number;
-  make(): AffectModule;
+  make(params?: Record<string, number | boolean>): AffectModule;
 }
 
 /** ACTIVE-domain affects, spec 2.9 order: Displace 0, Gradient 1, Mirror 2, Blindness 3, then ColorSwitcher. */
