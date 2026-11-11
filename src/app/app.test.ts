@@ -4,7 +4,7 @@ import { Engine } from '../engine/engine';
 import { repeatStamps } from '../modules/affect/repeatStamps';
 import { PHASE_DOWN, PHASE_MOVE, PHASE_UP, InputRing, KIND_MOUSE, packMeta } from '../core/inputRing';
 import { CaptureSink } from '../test/helpers';
-import { affectMenu, colorRgba, createApp, rgbaColor } from './app';
+import { affectMenu, colorRgba, createApp, createMenu, hideModules, rgbaColor } from './app';
 import { defaultValues, toParams } from './controls';
 import { isTextEntry, matchShortcut } from './shortcuts';
 import type { RenderClient } from '../render/client';
@@ -223,5 +223,46 @@ describe('app controller', () => {
   });
   it('colour round-trips through HSB', () => {
     expect(colorRgba(rgbaColor(0x1d70b8ff)) >>> 0).toBe(0x1d70b8ff);
+  });
+});
+
+describe('hidden modules (Settings > Modules)', () => {
+  const saved = { create: [...createMenu], affect: [...affectMenu] };
+  const restore = (): void => { createMenu.splice(0, createMenu.length, ...saved.create); affectMenu.splice(0, affectMenu.length, ...saved.affect); };
+
+  it('removes modules from the menus, so the number shortcuts follow what is shown', () => {
+    try {
+      hideModules(['create.shapes', 'affect.mirror']);
+      expect(createMenu).not.toContain('create.shapes');
+      expect(affectMenu).not.toContain('affect.mirror');
+      const sink = new CaptureSink();
+      const e = new Engine(1, sink);
+      const client = { setAffect() {}, clear() {} } as unknown as RenderClient;
+      const app = createApp(e, client, repeatStamps(), { redraw: () => {} });
+      expect(app.createId.value).toBe(createMenu[0]); // the first visible module is the starting one
+      app.run({ t: 'create', i: 0 });
+      expect(app.createId.value).toBe(createMenu[0]);
+      app.run({ t: 'create', i: 1 });
+      expect(app.createId.value).toBe(createMenu[1]); // key 2 is the second visible module, not the second registered one
+    } finally {
+      restore();
+    }
+  });
+  it('always keeps at least one drawing module', () => {
+    try {
+      hideModules(saved.create);
+      expect(createMenu.length).toBeGreaterThan(0);
+    } finally {
+      restore();
+    }
+  });
+  it('ignores unknown ids', () => {
+    try {
+      hideModules(['create.nope', 'affect.nope']);
+      expect(createMenu).toEqual(saved.create);
+      expect(affectMenu).toEqual(saved.affect);
+    } finally {
+      restore();
+    }
   });
 });

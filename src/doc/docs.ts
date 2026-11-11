@@ -66,6 +66,11 @@ export const clampSide = (n: number): number => Math.min(MAX_SIDE, Math.max(1, M
 export class Docs {
   constructor(readonly storage: Storage, private readonly now: () => number = Date.now, private readonly id: () => string = () => newId()) {}
 
+  /** True for any stored file id, trashed or not. */
+  async hasFile(id: string): Promise<boolean> {
+    return (await this.getFile(id)) !== undefined;
+  }
+
   async listFiles(): Promise<FileRecord[]> {
     const all = await this.storage.allRecords<FileRecord>('files');
     return all.filter((f) => f.deletedAt === undefined).sort((a, b) => b.updatedAt - a.updatedAt);
@@ -161,9 +166,9 @@ export class Docs {
   }
 
   /** A new file from imported pages (each with its snapshot bytes), under fresh ids so nothing already stored is touched. */
-  async importFile(name: string, pages: { name: string; width: number; height: number; background: number; origin: PageRecord['origin']; snapshot: Uint8Array }[]): Promise<{ file: FileRecord; pages: PageRecord[] }> {
+  async importFile(name: string, pages: { name: string; width: number; height: number; background: number; origin: PageRecord['origin']; snapshot: Uint8Array }[], id?: string): Promise<{ file: FileRecord; pages: PageRecord[] }> {
     const t = this.now();
-    const fileId = this.id();
+    const fileId = id ?? this.id();
     const records: PageRecord[] = [];
     for (const p of pages) {
       const rec = this.makePage(fileId, p.name, p.width, p.height, p.background, p.origin);

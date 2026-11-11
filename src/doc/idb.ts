@@ -25,7 +25,11 @@ export function openDb(factory: IDBFactory = indexedDB): Promise<IDBDatabase> {
       pages.createIndex('fileId', 'fileId');
       db.createObjectStore('blobs');
     };
-    req.onsuccess = () => res(req.result);
+    req.onsuccess = () => {
+      const db = req.result;
+      db.onversionchange = () => db.close(); // another tab upgrading or resetting the database must not be blocked by this one
+      res(db);
+    };
     req.onerror = () => rej(req.error);
     req.onblocked = () => rej(new Error('database upgrade blocked by another tab'));
   });

@@ -1,5 +1,5 @@
 // Hotkey map, spec 1.3.1, matched on KeyboardEvent.code. Pure: the caller supplies the modifier state and runs the action.
-// shortcut: only actions whose feature exists are bound; export, undo, pages, session, zoom and eyedropper join with their features.
+// The table itself lives in keymap.ts. shortcut: only actions whose feature exists are bound; zoom and the eyedropper join with theirs.
 export type Action =
   | { t: 'hudFlip' } // Tab: show the HUD keyed on, flip main bar <-> swatch bar
   | { t: 'hudToggle' } // Space
@@ -25,55 +25,13 @@ export type Action =
   | { t: 'pagesPanel' } // Mod+Backslash
   | { t: 'record' }; // Alt+R: session recording on or off
 
-export interface Mods { mod: boolean; shift: boolean; alt: boolean }
-
-const DIGITS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'];
+import { defaultKeymap, type Keymap, type Mods } from './keymap';
+export type { Mods };
 
 export const isMac = (): boolean => /Mac|iP/.test(globalThis.navigator?.platform ?? '');
 
-export function matchShortcut(code: string, { mod, shift, alt }: Mods): Action | null {
-  const d = DIGITS.indexOf(code);
-  if (d >= 0) {
-    if (mod && !alt) return { t: 'affect', i: d + (shift ? 10 : 0) };
-    if (!mod && !shift) return { t: 'create', i: d + (alt ? 10 : 0) };
-    return null;
-  }
-  const n = /^Numpad(\d)$/.exec(code);
-  if (n && !mod && !shift && !alt) return { t: 'swatchPick', i: Number(n[1]) };
-  if (mod) {
-    if (alt) return null;
-    switch (code) {
-      case 'Backspace': return shift ? null : { t: 'clear' };
-      case 'Period': return shift ? null : { t: 'collapse' };
-      case 'KeyZ': return shift ? { t: 'redo' } : { t: 'undo' };
-      case 'KeyY': return shift ? null : { t: 'redo' }; // Windows and Linux redo
-      case 'KeyE': return shift ? null : { t: 'export' };
-      case 'KeyC': return shift ? null : { t: 'copy' };
-      case 'Backslash': return shift ? null : { t: 'pagesPanel' };
-      default: return null;
-    }
-  }
-  if (alt && !shift && code === 'KeyN') return { t: 'pageNew' };
-  if (alt && !shift && code === 'KeyR') return { t: 'record' };
-  if (alt) return code === 'Equal' ? { t: 'alpha', d: 10 } : code === 'Minus' ? { t: 'alpha', d: -10 } : null;
-  if (shift) return code === 'KeyX' ? { t: 'swapColors' } : null;
-  switch (code) {
-    case 'Tab': return { t: 'hudFlip' };
-    case 'Space': return { t: 'hudToggle' };
-    case 'KeyH': return { t: 'cursor' };
-    case 'KeyS': return { t: 'style' };
-    case 'KeyX': return { t: 'colorToBg' };
-    case 'PageDown': return { t: 'pageNext' };
-    case 'PageUp': return { t: 'pagePrev' };
-    case 'BracketLeft': return { t: 'width', d: -1 };
-    case 'BracketRight': return { t: 'width', d: 1 };
-    case 'NumpadMultiply': return { t: 'alpha', d: 10 };
-    case 'NumpadDivide': return { t: 'alpha', d: -10 };
-    case 'NumpadAdd': return { t: 'swatchStep', d: 1 };
-    case 'NumpadSubtract': return { t: 'swatchStep', d: -1 };
-    default: return null;
-  }
-}
+/** Matches against the default key map, or against `keymap` (the user's overrides applied). */
+export const matchShortcut = (code: string, mods: Mods, keymap: Keymap = defaultKeymap): Action | null => keymap.match(code, mods);
 
 const TEXT_INPUT = /^(text|number|search|tel|url|email|password)$/;
 

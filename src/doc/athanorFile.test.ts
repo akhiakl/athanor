@@ -120,3 +120,73 @@ describe('import failures leave nothing behind', () => {
     await expect(importAthanor(d, bad)).rejects.toThrow(ImportError);
   });
 });
+
+describe('backup and restore (8.6.3)', async () => {
+  const { backupAll, restoreBackup } = await import('./backup');
+  const populated = async () => {
+    const d = make();
+    const a = await d.createFile('Alpha', 640, 480);
+    const b = await d.createFile('Beta', 640, 480);
+    await draw(d, a.page.id, [0, 30]);
+    return { d, a, b };
+  };
+
+  it('backs up every file as one ZIP of .athanor files with distinct names', async () => {
+    const { d } = await populated();
+    await d.createFile('Alpha', 100, 100); // same name twice
+    const { bytes, count } = await backupAll(d);
+    expect(count).toBe(3);
+    const names = unzip(bytes).map((e) => e.name).sort();
+    expect(names).toEqual(['Alpha (2).athanor', 'Alpha.athanor', 'Beta.athanor']);
+  });
+  it('restores into an empty store with the original file ids and drawings', async () => {
+    const { d, a } = await populated();
+    const { bytes } = await backupAll(d);
+    const fresh = make();
+    const r = await restoreBackup(fresh, bytes);
+    expect(r.restored.sort()).toEqual(['Alpha', 'Beta']);
+    expect(r.skipped).toEqual([]);
+    expect((await fresh.getFile(a.file.id))?.name).toBe('Alpha'); // the same id
+    const pages = await fresh.pages(a.file.id);
+    expect(await shapesOf(fresh, pages[0].id)).toEqual(await shapesOf(d, a.page.id));
+  });
+  it('restoring twice changes nothing: existing ids are skipped, trashed ones too', async () => {
+    const { d, a } = await populated();
+    const { bytes } = await backupAll(d);
+    const r = await restoreBackup(d, bytes);
+    expect(r.restored).toEqual([]);
+    expect(r.skipped.sort()).toEqual(['Alpha', 'Beta']);
+    expect((await d.listFiles()).length).toBe(2);
+    await d.trashFile(a.file.id);
+    expect((await restoreBackup(d, bytes)).skipped).toContain('Alpha'); // in the trash is still "exists"
+  });
+  it('reports a damaged file and still restores the others', async () => {
+    const { d } = await populated();
+    const entries = unzip((await backupAll(d)).bytes);
+    const torn = { ...entries[0], data: entries[0].data.subarray(0, 40) };
+    const fresh = make();
+    const r = await restoreBackup(fresh, zip([torn, entries[1]]));
+    expect(r.failed).toHaveLength(1);
+    expect(r.failed[0].name).toBe(entries[0].name);
+    expect(r.restored).toHaveLength(1);
+  });
+  it('accepts a single .athanor file, and rejects non-backups with a clear message', async () => {
+    const { d, a } = await populated();
+    const one = await exportAthanor(d, a.file.id);
+    const fresh = make();
+    expect((await restoreBackup(fresh, one)).restored).toEqual(['Alpha']);
+    await expect(restoreBackup(fresh, new TextEncoder().encode('hello, not a zip file at all'))).rejects.toThrow(/not a backup/);
+    await expect(restoreBackup(fresh, zip([{ name: 'readme.txt', data: new Uint8Array(1) }]))).rejects.toThrow(/no Athanor files/);
+  });
+  it('a file exported without an id imports as a new file', async () => {
+    const d = make();
+    const { file } = await d.createFile('Old', 100, 100);
+    const entries = unzip(await exportAthanor(d, file.id));
+    const m = JSON.parse(new TextDecoder().decode(entries[0].data));
+    delete m.id;
+    const old = zip([{ name: 'manifest.json', data: new TextEncoder().encode(JSON.stringify(m)) }, ...entries.slice(1)]);
+    const r = await restoreBackup(d, old);
+    expect(r.restored).toEqual(['Old']);
+    expect((await d.listFiles()).length).toBe(2);
+  });
+});

@@ -5,6 +5,7 @@ import { lazyIdbStorage } from '../doc/idb';
 import { href, type Route } from '../app/router';
 import { templateById } from './templates';
 import { Home } from './Home';
+import { Settings } from './Settings';
 import './home.css';
 
 export async function mountShell(el: HTMLElement, route: Route): Promise<void> {
@@ -17,6 +18,11 @@ export async function mountShell(el: HTMLElement, route: Route): Promise<void> {
     return;
   }
   await docs.purgeExpired().catch(() => 0); // trash older than 30 days goes on every visit
+  if (route.name === 'settings') {
+    document.title = 'Settings · Athanor';
+    render(h(Settings, { docs }), el);
+    return;
+  }
   document.title = 'Athanor';
   render(h(Home, { docs }), el);
 }
