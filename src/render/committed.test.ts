@@ -152,6 +152,17 @@ describe('Random', () => {
   });
 });
 
+describe('Random without a band hit', () => {
+  it('leaves an untouched shape clean: no vertex change and no dirty tiles', () => {
+    const st = new CommittedStore(256, 600, 600);
+    const id = st.add(square(0, 0, 100));
+    const before = Array.from(st.entries[id].shape.vtx);
+    randomAffect(1).hover!(st, 50, 50, 0); // inside, but every test point is >= 50 px away on both axes
+    expect(Array.from(st.entries[id].shape.vtx)).toEqual(before);
+    expect(st.dirtyCount).toBe(0);
+  });
+});
+
 describe('Smooth', () => {
   const zig = () => mk([MOVE, LINE, LINE, LINE, CLOSE], [0, 0, 10, 10, 20, 0, 30, 10], { rgba: 0x11223344 });
   it('replaces the hit shape with the smoothed M Q... L stream and is throttled to 75 ms', () => {
@@ -179,6 +190,18 @@ describe('Smooth', () => {
     expect(st.entries[1].shape.hdr[H.RGBA]).toBe(0x11223344);
     expect(st.dirtyCount).toBeGreaterThan(0); // the copy was not drawn by anyone yet
   });
+  it('repeat does not smooth its own copies, so a resting pointer cannot grow the store', () => {
+    const st = new CommittedStore(256, 600, 600);
+    st.add(zig());
+    const af = smoothAffect({ repeat: true });
+    af.hover!(st, 20, 3, 0);
+    expect(st.aliveCount).toBe(2);
+    let hx = -1, hy = -1; // a point where the copy is now the topmost hit
+    for (let y = 0; y <= 10 && hx < 0; y += 0.5) for (let x = 0; x <= 30; x += 0.5) if (st.hit(x, y) === 1) { hx = x; hy = y; break; }
+    expect(hx).toBeGreaterThanOrEqual(0);
+    for (let k = 1; k <= 20; k++) af.hover!(st, hx, hy, k * 100);
+    expect(st.aliveCount).toBe(2);
+  });
 });
 
 describe('Limit', () => {
@@ -198,6 +221,17 @@ describe('Limit', () => {
     const st = fill(10);
     limitAffect({ limit: 10 }).tick!(st, 1);
     expect(st.aliveCount).toBe(9);
+  });
+  it('uses one rule at the edges: remove min(overflow, alive), including a lone shape', () => {
+    const lone = fill(1);
+    limitAffect({ limit: 3 }).tick!(lone, 5);
+    expect(lone.aliveCount).toBe(0);
+    const some = fill(3);
+    limitAffect({ limit: 1 }).tick!(some, 10);
+    expect(some.aliveCount).toBe(0);
+    const edge = fill(4);
+    limitAffect({ limit: 2 }).tick!(edge, 0);
+    expect(edge.aliveCount).toBe(2);
   });
   it('never removes anything at or under the limit', () => {
     const st = fill(10);

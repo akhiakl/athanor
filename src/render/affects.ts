@@ -30,6 +30,7 @@ export function randomAffect(seed: number, { distortion = 50 } = {}): CommittedA
       const px = int(x);
       const py = int(y);
       let v = 0;
+      let changed = false;
       for (let c = 0; c < s.cmd.length; c++) {
         const op = s.cmd[c];
         const n = op === MOVE || op === LINE ? 1 : op === QUAD ? 2 : op === CUBIC ? 3 : 0;
@@ -40,11 +41,12 @@ export function randomAffect(seed: number, { distortion = 50 } = {}): CommittedA
           // cross-shaped band, legacy OR
           if (Math.abs(int(s.vtx[t]) - px) < 5 || Math.abs(int(s.vtx[t + 1]) - py) < 5) {
             for (let k = 0; k < 2 * n; k++) s.vtx[v + k] += rng.random(lo, hi);
+            changed = true;
           }
         }
         v += 2 * n;
       }
-      store.touch(id);
+      if (changed) store.touch(id); // an untouched shape must not dirty its tiles on every pointermove
     },
   };
 }
@@ -75,12 +77,15 @@ function endPoints(s: Shape): Float32Array {
  */
 export function smoothAffect({ repeat = false, throttleMs = 75 } = {}): CommittedAffect {
   let last = -Infinity;
+  // Copies made by `repeat`, by identity (ids restart after a clear). Hovering one must not smooth it again,
+  // or a resting pointer would append a new copy every throttle window without bound.
+  const copies = new WeakSet<Shape>();
   return {
     id: 'affect.smooth',
     hover(store, x, y, t) {
       if (t - last < throttleMs) return;
       const id = store.hit(x, y);
-      if (id < 0) return;
+      if (id < 0 || copies.has(store.entries[id].shape)) return;
       last = t;
       const e = store.entries[id];
       const pts = endPoints(e.shape);
@@ -100,7 +105,9 @@ export function smoothAffect({ repeat = false, throttleMs = 75 } = {}): Committe
         hdr[H.CMD_COUNT] = cmdN;
         hdr[H.VTX_COUNT] = vtxN;
         hdr[H.FLAGS] &= ~F_CLOSED; // smoothed output is open (no CLOSE)
-        store.add({ hdr, hdrF: new Float32Array(hdr.buffer), cmd, vtx }, true);
+        const copy: Shape = { hdr, hdrF: new Float32Array(hdr.buffer), cmd, vtx };
+        copies.add(copy);
+        store.add(copy, true);
       } else {
         e.shape.cmd = cmd;
         e.shape.vtx = vtx;
@@ -113,15 +120,15 @@ export function smoothAffect({ repeat = false, throttleMs = 75 } = {}): Committe
   };
 }
 
-/** Limit (5.4.6): keeps total shapes near `limit` by removing the oldest committed ones. */
+/**
+ * Limit (5.4.6): keeps total shapes at `limit` by removing the oldest committed ones.
+ * [DIVERGENCE] removes min(overflow, alive). Legacy removed one fewer when in-flight shapes alone exceeded
+ * the limit, but wiped a lone shape anyway; one rule is simpler and predictable.
+ */
 export function limitAffect({ limit = 10 } = {}): CommittedAffect {
   const run = (store: CommittedStore, activeCount: number): void => {
-    const alive = store.aliveCount;
-    const total = alive + activeCount;
-    if (total <= limit || alive === 0) return;
-    const r = total - limit;
-    const end = r > alive ? alive - 1 : r;
-    for (let k = 0; k < Math.max(1, end); k++) {
+    const n = Math.min(store.aliveCount + activeCount - limit, store.aliveCount);
+    for (let k = 0; k < n; k++) {
       const id = store.oldestAlive();
       if (id < 0) break;
       store.remove(id);

@@ -1094,7 +1094,7 @@ if total > limit and committedAlive > 0:
    r = total - limit; end = r > committedAlive ? committedAlive - 1 : r
    remove oldest max(1, end) committed shapes (end == 0 -> remove 1)
 ```
-Removal tombstones and dirties tiles (2.6).
+[DIVERGENCE] The web removes `min(total - limit, committedAlive)` oldest shapes; the legacy `alive - 1` / `max(1, ...)` pair left one shape in some cases and wiped a lone shape in others. Removal tombstones and dirties tiles (2.6).
 
 #### 5.4.7 ColorSwitcher
 `baseRange` 0-100 default 50; base color HSB `(h0, s0, b0)` captured at setup or via picker.
