@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { affectMenu, colorRgba, createMenu, type App } from '../app/app';
 import { moduleUi } from '../app/controls';
 import { Menu, SubBar, SwatchBar } from './Hud';
-import { IconCollapse, IconFlask, IconGrip, IconLayers, IconMinus, IconPalette, IconPlus, IconSliders, IconDownload, IconHome, IconPages, IconPen, IconRecord, IconRedo, IconStyle, IconTrash, IconUndo } from './icons';
+import { IconCollapse, IconFlask, IconGrip, IconLayers, IconMinus, IconPalette, IconPlus, IconSliders, IconDownload, IconHome, IconPages, IconPen, IconRecord, IconRefresh, IconRedo, IconStyle, IconTrash, IconUndo } from './icons';
 import { affectHint, createHint, withKey } from './keys';
 import { isHoriz, nudge, placementStyle, snap } from './placement';
 import type { Pages } from '../app/pages';
+import type { Pwa } from '../app/pwa';
 import { INTERVALS, type Session } from '../app/session';
 import type { Hud } from './hud';
 
@@ -67,7 +68,7 @@ function useRoving(pill: { current: HTMLDivElement | null }, horiz: boolean) {
   };
 }
 
-export function FloatingView({ app, hud, pages, session, goHome }: { app: App; hud: Hud; pages: Pages; session: Session; goHome: () => void }) {
+export function FloatingView({ app, hud, pages, session, goHome, pwa, update }: { app: App; hud: Hud; pages: Pages; session: Session; goHome: () => void; pwa: Pwa; update: () => void }) {
   const pos = hud.pos.value;
   const { edge } = pos;
   const drag = useRef<{ dx: number; dy: number } | null>(null);
@@ -252,6 +253,7 @@ export function FloatingView({ app, hud, pages, session, goHome }: { app: App; h
           type="button" class={armed ? 'danger' : undefined} aria-label={armed ? 'Confirm: clear canvas' : 'Clear canvas'}
           title={armed ? 'Press again to clear' : withKey('Clear', 'clear')} onClick={onClear}
         >{armed ? <><IconTrash /><span class="chip-label">Clear?</span></> : <IconTrash />}</button>
+        {pwa.updateReady.value && <button type="button" class="update" aria-label="Update ready: reload to use the new version" title="A new version is ready. Reload to use it." onClick={update}><IconRefresh /></button>}
         <button type="button" aria-label="Collapse toolbar" title={withKey('Collapse', 'collapse')} onClick={toggleCollapse}><IconCollapse /></button>
       </div>
     </div>
