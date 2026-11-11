@@ -46,6 +46,8 @@ export function createApp(engine: Engine, client: RenderClient, stamps: ReturnTy
   const bar = signal<'main' | 'swatch'>('main');
   const cursorHidden = signal(false);
   const axisMove = signal(false);
+  const canUndo = signal(false);
+  const canRedo = signal(false);
   let mirrorRef: MirrorModule | null = null;
 
   const valuesOf = (id: string): Params => values.value[id] ?? defaultValues(id);
@@ -188,8 +190,10 @@ export function createApp(engine: Engine, client: RenderClient, stamps: ReturnTy
         case 'swapColors': colors.value = [colors.value[1], colors.value[0]]; sync(); break;
         case 'cursor': cursorHidden.value = !cursorHidden.value; break;
         case 'clear': client.clear(); break;
+        case 'undo': client.undo(); break;
+        case 'redo': client.redo(); break;
         case 'hudFlip': bar.value = bar.value === 'main' ? 'swatch' : 'main'; break;
-        case 'hudToggle': case 'collapse': break; // the HUD owns these
+        case 'hudToggle': case 'collapse': case 'export': case 'copy': break; // the HUD and the exporter own these
       }
     });
     hooks.redraw();
@@ -198,7 +202,7 @@ export function createApp(engine: Engine, client: RenderClient, stamps: ReturnTy
   selectCreate(0);
 
   return {
-    lineWidth, fill, slot, colors, color, alphaLock, swatches, swatchIndex, createId, affectsOn, values, bar, cursorHidden, axisMove,
+    canUndo, canRedo, lineWidth, fill, slot, colors, color, alphaLock, swatches, swatchIndex, createId, affectsOn, values, bar, cursorHidden, axisMove,
     valuesOf, setColor, selectCreate, setAffect, setValue, press, moveAxis, addSwatch, removeSwatch, pickSwatch, setAlpha, setSlot, run,
     setLineWidth: (n: number) => { lineWidth.value = Math.max(1, Math.min(75, Math.round(n))); sync(); },
     setFill: (f: boolean) => { fill.value = f; sync(); },

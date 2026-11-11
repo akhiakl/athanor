@@ -35,6 +35,7 @@ export function createHud() {
   const popup = signal<string | null>(null);
   const stroke = signal(false);
   const pickerOpen = signal(false);
+  const exportOpen = signal(false);
   let insideHud = false;
   let hideTimer = 0;
   let restoreTimer = 0;
@@ -55,7 +56,7 @@ export function createHud() {
   }
 
   return {
-    model, height, popup, stroke, pickerOpen, mode, pos, collapsed, swatchPanel, flyout, persist, announcement,
+    model, height, popup, stroke, pickerOpen, exportOpen, mode, pos, collapsed, swatchPanel, flyout, persist, announcement,
     /** Polite live-region message; cleared first so a repeated message is announced again. */
     announce(msg: string): void {
       announcement.value = '';

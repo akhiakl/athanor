@@ -9,6 +9,10 @@ export type ToWorker =
   | { type: 'tick'; activeCount: number }
   | { type: 'resize'; dpr: number; w: number; h: number }
   | { type: 'clear' }
+  /** Undo history: a pointer gesture opens and closes a group (8.5.2); undo and redo act on the newest group. */
+  /** Serialize the committed log. The result comes back as `exportResult` with the same id. */
+  | { type: 'export'; id: number; format: 'png' | 'svg'; scale: number; transparent: boolean }
+  | { type: 'history'; op: 'begin' | 'end' | 'undo' | 'redo' }
   | { type: 'affect'; id: string; on: boolean; params?: AffectParams }
   /** A pointer or key event for committed affects that need it (Repeat: pointerdown, key B). */
   | { type: 'event'; name: 'down' | 'key'; code?: string };
@@ -23,5 +27,9 @@ export type FromWorker =
   | { type: 'repeatClone'; buffer: ArrayBuffer }
   /** Repeat asks the main thread to commit the stamps it is holding. */
   | { type: 'repeatCommit' }
+  | { type: 'exportResult'; id: number; blob: Blob }
+  | { type: 'exportError'; id: number; message: string }
+  /** What undo and redo can do now, sent when it changes. */
+  | { type: 'historyState'; canUndo: boolean; canRedo: boolean }
   /** The batch is drawn and presented; the main thread may drop its pending copy. */
   | { type: 'commitAck'; batchId: number };

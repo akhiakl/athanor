@@ -5,12 +5,18 @@ import { createAffect, noIO, type AffectIO, type AffectParams, type CommittedAff
 import { packBatch, unpackBatch } from './batch';
 import { CommittedStore } from './committed';
 import { drawShape, type Ctx2D } from './draw';
+import { pngBlob, svgBlob, type ExportOptions, type MakeCanvas } from './export';
+import { HistoryLog } from './history';
 
 export class RenderCore implements CommitSink {
   readonly store = new CommittedStore();
   readonly affects: CommittedAffect[] = [];
+  readonly history: HistoryLog;
 
-  constructor(private readonly ctx: Ctx2D, private background = '#ffffff', private readonly io: AffectIO = noIO) {}
+  constructor(private readonly ctx: Ctx2D, private background = '#ffffff', private readonly io: AffectIO = noIO, now?: () => number) {
+    this.history = new HistoryLog(this.store, 200, now);
+    this.store.journal = this.history;
+  }
 
   commit(a: ActiveArena, recs: Int32Array, n: number): void {
     this.commitBatch(packBatch(a, recs, n));
@@ -18,11 +24,14 @@ export class RenderCore implements CommitSink {
 
   /** Appends a CommitBatch (3.2.4) on top of the log and draws it directly: no replay needed for appends. */
   commitBatch(buf: ArrayBuffer): void {
-    for (const s of unpackBatch(buf)) {
-      this.store.add(s);
-      drawShape(this.ctx, s);
-    }
-    for (const af of this.affects) af.committed?.(this.store);
+    // one history group for the commit and whatever it triggers (Limit removing the oldest shapes)
+    this.history.scope(() => {
+      for (const s of unpackBatch(buf)) {
+        this.store.add(s);
+        drawShape(this.ctx, s);
+      }
+      for (const af of this.affects) af.committed?.(this.store);
+    });
   }
 
   /** Enables or replaces (on) / removes (off) a committed affect by id. */
@@ -77,8 +86,33 @@ export class RenderCore implements CommitSink {
     this.replay(Infinity);
   }
 
+  /** Clear is undoable: shapes are tombstoned as one history op rather than dropped. */
   clear(): void {
-    this.store.clear();
+    this.history.clearAll();
     this.replay(Infinity);
+  }
+
+  private exportOptions(transparent: boolean): ExportOptions {
+    return { width: this.store.width, height: this.store.height, background: this.background, transparent };
+  }
+
+  exportSvg(transparent: boolean): Blob {
+    return svgBlob(this.store.entries, this.exportOptions(transparent));
+  }
+
+  exportPng(scale: number, transparent: boolean, make: MakeCanvas): Promise<Blob> {
+    return pngBlob(this.store.entries, this.exportOptions(transparent), scale, make);
+  }
+
+  /** Undo / redo, then replay the tiles they dirtied. Returns whether anything changed. */
+  undo(): boolean {
+    const ok = this.history.undo();
+    if (ok) this.replay(Infinity);
+    return ok;
+  }
+  redo(): boolean {
+    const ok = this.history.redo();
+    if (ok) this.replay(Infinity);
+    return ok;
   }
 }

@@ -32,7 +32,8 @@ function rig(opts: { worker: boolean }) {
   const hoverSizes: number[] = []; // captured before the transfer detaches the buffer
   const changes = { n: 0 };
   let client!: RenderClient;
-  const host = new RenderHost((m: FromWorker) => client.onMessage(m), () => {}, { budgetMs: 4, ackImmediately: !opts.worker });
+  const exportCanvas = { getContext: () => mockCtx() as never, convertToBlob: async (o?: { type?: string }) => new Blob(['png-bytes'], { type: o?.type }) };
+  const host = new RenderHost((m: FromWorker) => client.onMessage(m), () => {}, { budgetMs: 4, ackImmediately: !opts.worker, makeCanvas: () => exportCanvas });
   client = new RenderClient(
     (m, transfer) => {
       sent.push(m);
@@ -216,6 +217,71 @@ describe('hover and affects over the protocol', () => {
     client.clear();
     expect(host.store!.aliveCount).toBe(0);
     expect(ctx.calls.some((c) => c.startsWith('fillRect'))).toBe(true);
+  });
+});
+
+describe('undo history over the protocol', () => {
+  it('reports what undo and redo can do, only when it changes, and a gesture is one step', () => {
+    const { client, host } = rig({ worker: true });
+    const states: string[] = [];
+    client.onHistory = (u, r) => void states.push(`${u}/${r}`);
+    const e = new Engine(1, client);
+    e.select(shapes());
+    client.historyBegin();
+    draw(e, 0);
+    draw(e, 50); // two commits in one gesture
+    client.historyEnd();
+    expect(host.store!.aliveCount).toBe(2);
+    expect(states).toEqual(['true/false']);
+    client.undo();
+    expect(host.store!.aliveCount).toBe(0);
+    expect(states).toEqual(['true/false', 'false/true']);
+    client.redo();
+    expect(host.store!.aliveCount).toBe(2);
+    expect(states.at(-1)).toBe('true/false');
+  });
+  it('undo is ignored mid-stroke and clear can be undone', () => {
+    const { client, host } = rig({ worker: true });
+    const e = new Engine(1, client);
+    e.select(shapes());
+    draw(e);
+    client.historyBegin();
+    draw(e, 50);
+    client.undo(); // a stroke is open: nothing happens
+    expect(host.store!.aliveCount).toBe(2);
+    client.historyEnd();
+    client.clear();
+    expect(host.store!.aliveCount).toBe(0);
+    client.undo();
+    expect(host.store!.aliveCount).toBe(2);
+  });
+  it('replays the tiles an undo dirtied so the canvas shows it', () => {
+    const { client, ctx } = rig({ worker: true });
+    const e = new Engine(1, client);
+    e.select(shapes());
+    draw(e);
+    ctx.calls.length = 0;
+    client.undo();
+    expect(ctx.calls.some((c) => c.startsWith('fillRect'))).toBe(true); // background redrawn where the shape was
+  });
+});
+
+describe('export over the protocol', () => {
+  it('returns an SVG blob of the committed log and a PNG blob at the asked scale', async () => {
+    const { client } = rig({ worker: true });
+    const e = new Engine(1, client);
+    e.select(shapes());
+    draw(e);
+    const svg = await client.export('svg');
+    expect(svg.type).toBe('image/svg+xml');
+    expect(await svg.text()).toContain('<path ');
+    const png = await client.export('png', { scale: 2 });
+    expect(png.type).toBe('image/png');
+  });
+  it('rejects when the host cannot export', async () => {
+    const r = rig({ worker: true });
+    (r.host as unknown as { opts: { makeCanvas?: unknown } }).opts.makeCanvas = () => { throw new Error('no canvas'); };
+    await expect(r.client.export('png')).rejects.toThrow('no canvas');
   });
 });
 

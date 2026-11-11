@@ -41,6 +41,7 @@ export function randomAffect(seed: number, { distortion = 50 } = {}): CommittedA
       const py = int(y);
       let v = 0;
       let changed = false;
+      let saved = false;
       for (let c = 0; c < s.cmd.length; c++) {
         const op = s.cmd[c];
         const n = op === MOVE || op === LINE ? 1 : op === QUAD ? 2 : op === CUBIC ? 3 : 0;
@@ -50,6 +51,10 @@ export function randomAffect(seed: number, { distortion = 50 } = {}): CommittedA
           const t = op === CUBIC ? v + 2 : v + 2 * (n - 1);
           // cross-shaped band, legacy OR
           if (Math.abs(int(s.vtx[t]) - px) < 5 || Math.abs(int(s.vtx[t + 1]) - py) < 5) {
+            if (!saved) {
+              store.willMutate(id); // pre-image for undo, once per burst
+              saved = true;
+            }
             for (let k = 0; k < 2 * n; k++) s.vtx[v + k] += rng.random(lo, hi);
             changed = true;
           }
@@ -119,6 +124,7 @@ export function smoothAffect({ repeat = false, throttleMs = 75 } = {}): Committe
         copies.add(copy);
         store.add(copy, true);
       } else {
+        store.willMutate(id);
         e.shape.cmd = cmd;
         e.shape.vtx = vtx;
         e.shape.hdr[H.CMD_COUNT] = cmdN;

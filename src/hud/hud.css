@@ -214,6 +214,24 @@
   .sv canvas { display: block; inline-size: 100%; block-size: 100%; }
   .sv i { position: absolute; inline-size: 16px; block-size: 16px; margin: -8px 0 0 -8px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.4); pointer-events: none; }
 
+  /* ---- Export dialog ---- */
+  .export { pointer-events: auto; color: var(--fg); inline-size: min(22rem, calc(100vw - 24px)); box-sizing: border-box; padding: 18px; border: 0; border-radius: 18px; z-index: 6; }
+  .export::backdrop { background: rgb(0 0 0 / 0.32); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+  .export h2 { margin: 0 0 12px; font-size: 15px; font-weight: 650; }
+  .export fieldset { border: 0; margin: 0 0 12px; padding: 0; display: grid; gap: 4px; }
+  .export legend { padding: 0; margin-block-end: 6px; font-size: 12px; color: var(--fg-dim); }
+  .export fieldset > label, .export .check { display: flex; align-items: center; gap: 0.6rem; min-block-size: 2.1rem; padding: 0 0.6rem; border-radius: 9px; cursor: pointer; }
+  .export fieldset > label:has(:checked) { background: var(--pressed); }
+  .export small { color: var(--fg-dim); margin-inline-start: auto; }
+  .export .scales { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 2px; border-radius: 11px; background: var(--hover); }
+  #hud .export .scales button { min-inline-size: 0; }
+  .export .hint { margin: 6px 0 0; font-size: 12px; color: var(--fg-dim); }
+  .export .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-block-start: 12px; }
+  #hud .export .actions button { box-shadow: inset 0 0 0 1px var(--line); }
+  #hud .export .actions .primary { background: var(--accent); color: var(--on-accent); font-weight: 600; box-shadow: none; }
+  #hud .export button:disabled { opacity: 0.5; cursor: progress; }
+  .export .status { min-block-size: 1.3em; margin: 10px 0 0; font-size: 12px; color: var(--fg-dim); }
+  #hud .export .close { inline-size: 100%; margin-block-start: 4px; }
   .sr-only { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
   .floating .flyout { max-block-size: 40dvh; overflow-y: auto; overscroll-behavior: contain; }
   @media (prefers-reduced-motion: no-preference) {

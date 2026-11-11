@@ -1,6 +1,7 @@
-import { H, HDR_STRIDE, type ActiveArena } from '../core/arena';
+import { CLOSE, F_EVENODD, F_FILL, H, HDR_STRIDE, LINE, MOVE, type ActiveArena } from '../core/arena';
 import { InputRing, KIND_MOUSE, KIND_PEN, META_HW_PRESSURE, PHASE_DOWN, PHASE_MOVE, PHASE_UP, packMeta } from '../core/inputRing';
 import type { CommitSink, Engine } from '../engine/engine';
+import type { Shape } from '../render/batch';
 
 export interface Dump {
   cmd: number[];
@@ -47,3 +48,18 @@ export const close4 = (got: number[], want: number[], digits = 4): void => {
     if (!Number.isFinite(got[i]) || Math.abs(got[i] - w) > 10 ** -digits) throw new Error(`[${i}] ${got[i]} != ${w}\n${got}`);
   });
 };
+
+/** A committed shape from raw command and vertex arrays (tests for the render side). */
+export function mkShape(cmd: number[], vtx: number[], opts: { evenodd?: boolean; lw?: number; rgba?: number; fill?: boolean } = {}): Shape {
+  const hdr = new Int32Array(HDR_STRIDE);
+  hdr[H.CMD_COUNT] = cmd.length;
+  hdr[H.VTX_COUNT] = vtx.length / 2;
+  hdr[H.RGBA] = opts.rgba ?? 0x000000ff;
+  if (opts.evenodd) hdr[H.FLAGS] |= F_EVENODD;
+  if (opts.fill) hdr[H.FLAGS] |= F_FILL;
+  const hdrF = new Float32Array(hdr.buffer);
+  hdrF[H.LINE_WIDTH] = opts.lw ?? 1;
+  return { hdr, hdrF, cmd: Uint8Array.from(cmd), vtx: Float32Array.from(vtx) };
+}
+export const squareShape = (x: number, y: number, n = 10): Shape =>
+  mkShape([MOVE, LINE, LINE, LINE, CLOSE], [x, y, x + n, y, x + n, y + n, x, y + n]);

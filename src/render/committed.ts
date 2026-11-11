@@ -13,7 +13,16 @@ export interface Entry {
   tx0: number; ty0: number; tx1: number; ty1: number;
 }
 
+/** Observer of store mutations: the undo history (8.5). Called before the change it describes, except add (after). */
+export interface StoreJournal {
+  add(id: number): void;
+  remove(id: number): void;
+  /** Before a shape is mutated in place: the chance to keep a pre-image. */
+  willMutate(id: number, shape: Shape): void;
+}
+
 export class CommittedStore {
+  journal: StoreJournal | null = null;
   readonly entries: Entry[] = [];
   aliveCount = 0;
   cols = 0;
@@ -96,15 +105,48 @@ export class CommittedStore {
     this.aliveCount++;
     this.register(id, e);
     if (dirty) this.dirtyRange(e.tx0, e.ty0, e.tx1, e.ty1);
+    this.journal?.add(id);
     return id;
   }
 
   remove(id: number): void {
     const e = this.entries[id];
     if (!e?.alive) return;
+    this.journal?.remove(id);
     e.alive = false;
     this.aliveCount--;
     this.dirtyRange(e.tx0, e.ty0, e.tx1, e.ty1);
+  }
+
+  /** Undo of a removal: the shape comes back at its original z-order (ids are never reused). */
+  revive(id: number): void {
+    const e = this.entries[id];
+    if (!e || e.alive) return;
+    e.alive = true;
+    this.aliveCount++;
+    this.register(id, e); // re-registers: a resize while it was dead dropped its grid membership
+    this.dirtyRange(e.tx0, e.ty0, e.tx1, e.ty1);
+  }
+
+  /** Swaps a live shape for another (undo/redo of a mutation) and re-grids it. */
+  replaceShape(id: number, shape: Shape): void {
+    const e = this.entries[id];
+    if (!e) return;
+    e.shape = shape;
+    this.touch(id);
+  }
+
+  /** Ids of every live shape in log order. */
+  aliveIds(): number[] {
+    const out: number[] = [];
+    for (let id = 0; id < this.entries.length; id++) if (this.entries[id].alive) out.push(id);
+    return out;
+  }
+
+  /** Affects call this before mutating a shape in place, so the history can keep a pre-image (copy on first write). */
+  willMutate(id: number): void {
+    const e = this.entries[id];
+    if (e?.alive) this.journal?.willMutate(id, e.shape);
   }
 
   /** Call after mutating a shape's vertices (or swapping its arrays): dirties old and new tiles, extends the grid. */
