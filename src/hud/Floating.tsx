@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { affectMenu, colorRgba, createMenu, type App } from '../app/app';
 import { moduleUi } from '../app/controls';
 import { Menu, SubBar, SwatchBar } from './Hud';
-import { IconCollapse, IconFlask, IconGrip, IconLayers, IconMinus, IconPalette, IconPlus, IconSliders, IconDownload, IconPages, IconPen, IconRecord, IconRedo, IconStyle, IconTrash, IconUndo } from './icons';
+import { IconCollapse, IconFlask, IconGrip, IconLayers, IconMinus, IconPalette, IconPlus, IconSliders, IconDownload, IconHome, IconPages, IconPen, IconRecord, IconRedo, IconStyle, IconTrash, IconUndo } from './icons';
 import { affectHint, createHint, modLabel, shiftLabel } from './keys';
 import { isHoriz, nudge, placementStyle, snap } from './placement';
 import type { Pages } from '../app/pages';
@@ -67,7 +67,7 @@ function useRoving(pill: { current: HTMLDivElement | null }, horiz: boolean) {
   };
 }
 
-export function FloatingView({ app, hud, pages, session }: { app: App; hud: Hud; pages: Pages; session: Session }) {
+export function FloatingView({ app, hud, pages, session, goHome }: { app: App; hud: Hud; pages: Pages; session: Session; goHome: () => void }) {
   const pos = hud.pos.value;
   const { edge } = pos;
   const drag = useRef<{ dx: number; dy: number } | null>(null);
@@ -173,6 +173,7 @@ export function FloatingView({ app, hud, pages, session }: { app: App; hud: Hud;
           onPointerMove={onGripMove} onPointerUp={onGripUp} onPointerCancel={onGripUp} onKeyDown={onGripKey}
         ><IconGrip /></button>
         {sep}
+        <button type="button" aria-label="Home" title="Home: your files" onClick={goHome}><IconHome /></button>
         <Menu id="create" hud={hud} cls="primary" label={moduleUi[app.createId.value].title} icon={<IconFlask />} ariaLabel={`Create: ${moduleUi[app.createId.value].title}`}>
           {createMenu.map((id, i) => (
             <label key={id}>

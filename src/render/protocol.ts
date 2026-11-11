@@ -11,7 +11,7 @@ export type ToWorker =
   | { type: 'clear' }
   /** Undo history: a pointer gesture opens and closes a group (8.5.2); undo and redo act on the newest group. */
   /** Serialize the committed log. The result comes back as `exportResult` with the same id. */
-  | { type: 'export'; id: number; format: 'png' | 'svg' | 'pdf'; scale: number; transparent: boolean }
+  | { type: 'export'; id: number; format: 'png' | 'svg' | 'pdf' | 'thumb'; /** for 'thumb': the width in px */ scale: number; transparent: boolean }
   /** Open a page of the document (loading its saved drawing) or flush pending saves now. */
   | { type: 'page'; op: 'open'; pageId: string; width: number; height: number; background: number }
   | { type: 'page'; op: 'flush'; id: number }

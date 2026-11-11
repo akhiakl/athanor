@@ -127,7 +127,7 @@ export class RenderClient implements CommitSink {
    * Serializes the committed log in the render thread. Call it synchronously from the user gesture when the result feeds the
    * clipboard: the promise form of ClipboardItem keeps Safari's user activation (3.4.4).
    */
-  export(format: 'png' | 'svg' | 'pdf', { scale = 1, transparent = false } = {}): Promise<Blob> {
+  export(format: 'png' | 'svg' | 'pdf' | 'thumb', { scale = 1, transparent = false } = {}): Promise<Blob> {
     const id = this.nextExport++;
     return new Promise((resolve, reject) => {
       this.exports.set(id, { resolve, reject });

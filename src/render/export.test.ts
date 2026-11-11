@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CUBIC, F_GRADIENT, H, LINE, MOVE, QUAD, CLOSE } from '../core/arena';
 import { mkShape, squareShape } from '../test/helpers';
 import { CommittedStore } from './committed';
-import { MAX_PIXELS, maxScale, num, pathData, pngBlob, svgBlob, svgChunks, type ExportCanvas } from './export';
+import { MAX_PIXELS, maxScale, num, pathData, pngBlob, svgBlob, svgChunks, thumbBlob, type ExportCanvas } from './export';
 
 const opts = { width: 300, height: 200, background: '#ffffff', transparent: false };
 const entriesOf = (...shapes: ReturnType<typeof mkShape>[]) => {
@@ -126,5 +126,17 @@ describe('PNG export (3.4.2)', () => {
     expect(maxScale(3000, 2000)).toBe(1);
     expect(maxScale(300, 200)).toBe(4);
     expect(maxScale(1920, 1080)).toBe(2);
+  });
+});
+
+describe('thumbnail export', () => {
+  it('is the requested width, keeps the aspect ratio, paints the page background and never enlarges', async () => {
+    const f = fakeCanvas();
+    await thumbBlob(entriesOf(squareShape(0, 0)).entries, opts, 150, f.make);
+    expect([f.dims.w, f.dims.h]).toEqual([150, 100]);
+    expect(f.calls[0]).toBe('setTransform(0.5,0,0,0.5,0,0)');
+    expect(f.calls).toContain('fillStyle=#ffffff');
+    await thumbBlob(entriesOf().entries, opts, 900, f.make);
+    expect([f.dims.w, f.dims.h]).toEqual([300, 200]); // a small page is not upscaled
   });
 });

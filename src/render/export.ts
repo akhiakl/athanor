@@ -127,3 +127,16 @@ export async function pngBlob(entries: readonly Entry[], o: ExportOptions, scale
   for (const e of entries) if (e.alive) drawShape(ctx, e.shape);
   return canvas.convertToBlob({ type: 'image/png' });
 }
+
+/** A small preview of the page for the file browser: `width` px wide, always on the page background, WebP where the browser can encode it. */
+export async function thumbBlob(entries: readonly Entry[], o: ExportOptions, width: number, make: MakeCanvas): Promise<Blob> {
+  const k = Math.min(1, Math.max(0.01, width / Math.max(1, o.width)));
+  const canvas = make(Math.max(1, Math.round(o.width * k)), Math.max(1, Math.round(o.height * k)));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('2d context unavailable');
+  ctx.setTransform(k, 0, 0, k, 0, 0);
+  ctx.fillStyle = o.background;
+  ctx.fillRect(0, 0, o.width, o.height);
+  for (const e of entries) if (e.alive) drawShape(ctx, e.shape);
+  return canvas.convertToBlob({ type: 'image/webp' }); // Safari cannot encode WebP and returns a PNG: still a valid image
+}

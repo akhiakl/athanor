@@ -7,6 +7,6 @@ import type { RenderClient } from '../render/client';
 import type { Hud } from './hud';
 import './hud.css';
 
-export interface ExportContext { client: RenderClient; size: () => { w: number; h: number }; dpr: () => number; pages: Pages; session: Session }
+export interface ExportContext { client: RenderClient; size: () => { w: number; h: number }; dpr: () => number; pages: Pages; session: Session; goHome: () => void }
 
 export const mountHud = (el: HTMLElement, app: App, hud: Hud, exp: ExportContext): void => render(<HudView app={app} hud={hud} exp={exp} />, el);

@@ -1,0 +1,65 @@
+@layer home {
+  :root {
+    color-scheme: light dark;
+    --bg: light-dark(#f6f6f8, #141418);
+    --surface: light-dark(#ffffff, #1e1e24);
+    --fg: light-dark(#16161a, #f4f4f7);
+    --dim: color-mix(in oklab, var(--fg) 66%, transparent);
+    --line: light-dark(rgb(0 0 0 / 0.1), rgb(255 255 255 / 0.14));
+    --accent: light-dark(oklch(0.5 0.21 265), oklch(0.74 0.15 265));
+    --on-accent: light-dark(#fff, #0c0f20);
+    --danger: light-dark(oklch(0.52 0.21 25), oklch(0.72 0.16 25));
+    --hover: color-mix(in oklab, var(--fg) 7%, transparent);
+  }
+  html, body { position: static; overflow: auto; background: var(--bg); color: var(--fg); }
+  #app { font: 14px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  #app:empty { display: none; }
+  .home { max-inline-size: 72rem; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; min-block-size: 100dvh; box-sizing: border-box; }
+  .home.dragging { outline: 2px dashed var(--accent); outline-offset: -8px; }
+  .home header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-block-end: 0.5rem; }
+  .home h1 { margin: 0; font-size: 1.5rem; letter-spacing: -0.02em; }
+  .home h2 { margin: 1.5rem 0 0.6rem; font-size: 0.8rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
+  .actions { display: flex; gap: 0.5rem; }
+  .home :is(button, select, input[type='search'], input.rename) { font: inherit; color: inherit; }
+  .home button, .home select { min-block-size: 2.4rem; padding: 0 0.9rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; touch-action: manipulation; }
+  .home button.primary { background: var(--accent); border-color: transparent; color: var(--on-accent); font-weight: 600; }
+  .home button.danger { color: var(--danger); }
+  .home button.link { border: 0; background: none; min-block-size: 0; padding: 0 0.3rem; color: var(--accent); text-decoration: underline; }
+  .home button:disabled { opacity: 0.45; cursor: default; }
+  @media (hover: hover) { .home button:not(.primary, .link):hover:not(:disabled) { background: var(--hover); } }
+  .home :is(button, a, input, select):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .note { min-block-size: 1.4em; margin: 0.25rem 0 0; color: var(--dim); }
+  .templates { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.75rem; }
+  .templates button { inline-size: 100%; block-size: 100%; display: grid; gap: 0.2rem; padding: 0.8rem 1rem; text-align: start; border-radius: 14px; }
+  .templates span { color: var(--dim); font-size: 0.85rem; }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-block: 1.5rem 1rem; }
+  .tabs { display: inline-flex; padding: 2px; border-radius: 12px; background: var(--hover); margin-inline-end: auto; }
+  .home .tabs button { border: 0; background: transparent; min-block-size: 2.1rem; border-radius: 10px; }
+  .home .tabs button[aria-selected='true'] { background: var(--surface); box-shadow: 0 1px 3px rgb(0 0 0 / 0.2); font-weight: 600; }
+  .home input[type='search'] { min-block-size: 2.4rem; padding: 0 0.8rem; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); inline-size: min(18rem, 100%); }
+  .sort { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--dim); }
+  .grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 1rem; }
+  .card { position: relative; display: grid; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); overflow: hidden; }
+  .card .open { display: block; aspect-ratio: 4 / 3; background: repeating-conic-gradient(color-mix(in oklab, var(--fg) 6%, transparent) 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
+  .card img, .thumb-empty { display: block; inline-size: 100%; block-size: 100%; object-fit: contain; background: #fff; }
+  .thumb-empty { background: var(--surface); }
+  .meta { display: grid; gap: 0.1rem; padding: 0.6rem 2.6rem 0.7rem 0.8rem; min-inline-size: 0; }
+  .name { font-weight: 600; color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sub { color: var(--dim); font-size: 0.82rem; }
+  .home .rename { min-block-size: 1.9rem; padding: 0 0.4rem; border: 1px solid var(--accent); border-radius: 8px; background: var(--bg); inline-size: 100%; box-sizing: border-box; }
+  .card-menu { position: absolute; inset-block-end: 0.45rem; inset-inline-end: 0.45rem; }
+  .home .card-menu > button { inline-size: 2.2rem; min-inline-size: 2.2rem; padding: 0; border-radius: 50%; border-color: transparent; background: transparent; font-size: 1.2rem; }
+  .menu { position: absolute; inset-block-end: calc(100% + 4px); inset-inline-end: 0; z-index: 5; min-inline-size: 11rem; display: grid; padding: 5px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 8px 28px rgb(0 0 0 / 0.25); }
+  .menu :is(a, button) { display: block; padding: 0.55rem 0.7rem; border: 0; border-radius: 8px; background: transparent; text-align: start; color: inherit; text-decoration: none; min-block-size: 0; }
+  @media (hover: hover) { .menu :is(a, button):hover { background: var(--hover); } }
+  .trash { list-style: none; margin: 0 0 1rem; padding: 0; display: grid; gap: 0.5rem; }
+  .trash li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; padding: 0.6rem 0.8rem; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  .trash .name { margin-inline-end: auto; }
+  .empty { color: var(--dim); }
+  .drop { display: grid; gap: 0.3rem; padding: 2.5rem 1rem; text-align: center; border: 2px dashed var(--line); border-radius: 16px; color: var(--dim); }
+  .drop strong { color: var(--fg); }
+  .storage { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem; margin-block-start: 2.5rem; padding-block-start: 1rem; border-block-start: 1px solid var(--line); color: var(--dim); font-size: 0.85rem; }
+  .storage progress { display: block; inline-size: 9rem; block-size: 6px; margin-block-start: 4px; accent-color: var(--accent); }
+  .reminder { inline-size: 100%; color: var(--danger); font-weight: 600; }
+  @media (prefers-reduced-motion: no-preference) { .card { transition: transform 140ms ease, box-shadow 140ms ease; } .card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgb(0 0 0 / 0.12); } }
+}

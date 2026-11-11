@@ -3,6 +3,16 @@
 import { PagePersistence, snapKey } from './persistence';
 import type { Storage } from './storage';
 
+/** What a template sets up when its file is first opened (8.3.1). */
+export interface Preset {
+  create?: string;
+  affects?: string[];
+  values?: Record<string, Record<string, number | boolean>>;
+  session?: { intervalSec: number; autoClear: boolean; start: boolean };
+}
+
+export const TRASH_DAYS = 30;
+
 export interface FileRecord {
   id: string;
   name: string;
@@ -12,6 +22,11 @@ export interface FileRecord {
   lastPageId: string;
   /** Set when moved to the trash; the file and its pages stay stored until purged. */
   deletedAt?: number;
+  /** Page 1 as a small image for the file browser. */
+  thumb?: Blob;
+  preset?: Preset;
+  /** True until the editor has applied `preset` once; the user's later changes are not overwritten on the next open. */
+  presetPending?: boolean;
 }
 
 export interface PageRecord {
@@ -61,11 +76,11 @@ export class Docs {
   }
 
   /** A new file with one blank page of the given size. */
-  async createFile(name: string, width: number, height: number): Promise<{ file: FileRecord; page: PageRecord }> {
+  async createFile(name: string, width: number, height: number, preset?: Preset): Promise<{ file: FileRecord; page: PageRecord }> {
     const t = this.now();
     const fileId = this.id();
     const page = this.makePage(fileId, 'Page 1', width, height);
-    const file: FileRecord = { id: fileId, name, createdAt: t, updatedAt: t, pageOrder: [page.id], lastPageId: page.id };
+    const file: FileRecord = { id: fileId, name, createdAt: t, updatedAt: t, pageOrder: [page.id], lastPageId: page.id, ...(preset ? { preset, presetPending: true } : {}) };
     await this.storage.putRecord('pages', page);
     await this.storage.putRecord('files', file);
     return { file, page };
@@ -199,6 +214,63 @@ export class Docs {
   async setLastPage(fileId: string, pageId: string): Promise<void> {
     const file = await this.requireFile(fileId);
     if (file.lastPageId !== pageId) await this.storage.putRecord('files', { ...file, lastPageId: pageId });
+  }
+
+  /** The file's preset has been applied; it will not be applied again. */
+  async markPresetApplied(fileId: string): Promise<void> {
+    const f = await this.requireFile(fileId);
+    if (f.presetPending) await this.storage.putRecord('files', { ...f, presetPending: false });
+  }
+
+  /** Saves the file browser thumbnail without counting as an edit (the "last edited" order must not move). */
+  async setThumb(fileId: string, thumb: Blob): Promise<void> {
+    const f = await this.getFile(fileId);
+    if (f) await this.storage.putRecord('files', { ...f, thumb });
+  }
+
+  /** A whole file copied under new ids, with every page's saved content. The open page must be flushed first. */
+  async duplicateFile(fileId: string): Promise<FileRecord> {
+    const src = await this.requireFile(fileId);
+    const newFileId = this.id();
+    const order: string[] = [];
+    for (const pid of src.pageOrder) {
+      const p = await this.getPage(pid);
+      if (!p) continue;
+      const copy: PageRecord = { ...p, id: this.id(), fileId: newFileId, createdAt: this.now() };
+      await this.copyBlobs(p.id, copy.id);
+      await this.storage.putRecord('pages', copy);
+      order.push(copy.id);
+    }
+    const t = this.now();
+    const { deletedAt: _d, presetPending: _p, ...rest } = src;
+    const file: FileRecord = { ...rest, id: newFileId, name: `${src.name} copy`, createdAt: t, updatedAt: t, pageOrder: order, lastPageId: order[src.pageOrder.indexOf(src.lastPageId)] ?? order[0] };
+    await this.storage.putRecord('files', file);
+    return file;
+  }
+
+  /** Files in the trash, newest first. */
+  async listTrash(): Promise<FileRecord[]> {
+    const all = await this.storage.allRecords<FileRecord>('files');
+    return all.filter((f) => f.deletedAt !== undefined).sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0));
+  }
+
+  /** Deletes a file for good: its pages, their saved content and the record. */
+  async purgeFile(fileId: string): Promise<void> {
+    const f = await this.getFile(fileId);
+    if (!f) return;
+    for (const pid of f.pageOrder) {
+      await new PagePersistence(this.storage, pid, { width: 1, height: 1, background: 0 }).destroy();
+      await this.storage.deleteRecord('pages', pid);
+    }
+    await this.storage.deleteRecord('files', fileId);
+  }
+
+  /** Purges trash older than `TRASH_DAYS`. Returns how many files went. */
+  async purgeExpired(): Promise<number> {
+    const cutoff = this.now() - TRASH_DAYS * 86_400_000;
+    const old = (await this.listTrash()).filter((f) => (f.deletedAt ?? 0) < cutoff);
+    for (const f of old) await this.purgeFile(f.id);
+    return old.length;
   }
 
   /** Moves a file to the trash; its pages and content stay until it is purged. */

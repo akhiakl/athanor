@@ -3,7 +3,7 @@ import { LINE, MOVE } from '../core/arena';
 import { CommittedStore } from '../render/committed';
 import { HistoryLog } from '../render/history';
 import { mkShape, squareShape } from '../test/helpers';
-import { Docs, newId } from './docs';
+import { Docs, TRASH_DAYS, newId } from './docs';
 import { Kind, applySegments, concat, decodeSegments, encodeSegment } from './pageLog';
 import { COMPACT_SLACK, PagePersistence } from './persistence';
 import { PageRecorder } from './recorder';
@@ -249,5 +249,81 @@ describe('Docs', () => {
     const p2 = await d.addPage(file.id);
     await d.setLastPage(file.id, p2.id);
     expect((await d.getFile(file.id))!.lastPageId).toBe(p2.id);
+  });
+});
+
+describe('Docs: files, trash, thumbnails, presets', () => {
+  let t = 1_000_000;
+  const mk = () => new Docs(new MemoryStorage(), () => t, () => `d${++t}`);
+
+  it('duplicates a whole file with every page and its drawing, under new ids', async () => {
+    const d = mk();
+    const { file, page } = await d.createFile('Book', 800, 600);
+    const p2 = await d.addPage(file.id);
+    const live = store();
+    await new PageSaver(live, new PagePersistence(d.storage, page.id, header), () => {}, 0, false).flush(); // nothing yet: no blobs
+    const saver = new PageSaver(live, new PagePersistence(d.storage, p2.id, header), () => {}, 0, false);
+    live.add(squareShape(3, 3)); await saver.flush();
+    const copy = await d.duplicateFile(file.id);
+    expect(copy.name).toBe('Book copy');
+    expect(copy.id).not.toBe(file.id);
+    const pages = await d.pages(copy.id);
+    expect(pages).toHaveLength(2);
+    expect(pages.every((p) => p.fileId === copy.id && ![page.id, p2.id].includes(p.id))).toBe(true);
+    const restored = store();
+    await PagePersistence.restore(d.storage, pages[1].id, restored, header);
+    expect(state(restored)).toEqual(state(live));
+    expect((await d.listFiles()).map((f) => f.name).sort()).toEqual(['Book', 'Book copy']);
+  });
+  it('a duplicate of a trashed or preset file starts clean', async () => {
+    const d = mk();
+    const { file } = await d.createFile('T', 100, 100, { affects: ['affect.mirror'] });
+    await d.trashFile(file.id);
+    const copy = await d.duplicateFile(file.id);
+    expect(copy.deletedAt).toBeUndefined();
+    expect(copy.presetPending).toBeUndefined();
+  });
+  it('trash: lists newest first, restores, and purges for good with all content', async () => {
+    const d = mk();
+    const a = await d.createFile('A', 100, 100), b = await d.createFile('B', 100, 100);
+    await new PagePersistence(d.storage, a.page.id, header).append(new Uint8Array(3));
+    await d.trashFile(a.file.id); t += 10; await d.trashFile(b.file.id);
+    expect((await d.listTrash()).map((f) => f.name)).toEqual(['B', 'A']);
+    expect(await d.listFiles()).toEqual([]);
+    await d.restoreFile(b.file.id);
+    expect((await d.listFiles()).map((f) => f.name)).toEqual(['B']);
+    await d.purgeFile(a.file.id);
+    expect(await d.getFile(a.file.id)).toBeUndefined();
+    expect(await d.getPage(a.page.id)).toBeUndefined();
+    expect(await d.storage.blobKeys(`p:${a.page.id}:`)).toEqual([]);
+    await d.purgeFile('nope'); // unknown: no error
+  });
+  it(`purges trash older than ${TRASH_DAYS} days and only that`, async () => {
+    const d = mk();
+    const old = await d.createFile('Old', 100, 100), fresh = await d.createFile('Fresh', 100, 100);
+    await d.trashFile(old.file.id);
+    t += (TRASH_DAYS + 1) * 86_400_000;
+    await d.trashFile(fresh.file.id);
+    expect(await d.purgeExpired()).toBe(1);
+    expect((await d.listTrash()).map((f) => f.name)).toEqual(['Fresh']);
+  });
+  it('a thumbnail does not move "last edited"', async () => {
+    const d = mk();
+    const { file } = await d.createFile('A', 100, 100);
+    const before = (await d.getFile(file.id))!.updatedAt;
+    t += 5000;
+    await d.setThumb(file.id, new Blob(['x'], { type: 'image/webp' }));
+    const after = (await d.getFile(file.id))!;
+    expect(after.updatedAt).toBe(before);
+    expect(after.thumb?.type).toBe('image/webp');
+    await d.setThumb('missing', new Blob()); // unknown file: ignored
+  });
+  it('a preset is pending until it is marked applied, once', async () => {
+    const d = mk();
+    const { file } = await d.createFile('M', 100, 100, { affects: ['affect.mirror'] });
+    expect((await d.getFile(file.id))!.presetPending).toBe(true);
+    await d.markPresetApplied(file.id);
+    expect((await d.getFile(file.id))!.presetPending).toBe(false);
+    expect((await d.getFile(file.id))!.preset).toEqual({ affects: ['affect.mirror'] }); // kept for reference
   });
 });
