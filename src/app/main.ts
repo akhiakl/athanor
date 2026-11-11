@@ -5,6 +5,7 @@ import { Engine } from '../engine/engine';
 import { createModules } from '../modules/registry';
 import { ActiveRenderer } from '../render/active';
 import { RenderClient } from '../render/client';
+import { effectiveDpr } from '../render/dpr';
 import { RenderHost } from '../render/host';
 import type { FromWorker } from '../render/protocol';
 import { Transport } from '../render/transport';
@@ -27,7 +28,7 @@ let scheduled = false; // declared before createBackend: the local host requests
 function createBackend(): { client: RenderClient; frame: () => boolean } {
   const w = stage.clientWidth;
   const h = stage.clientHeight;
-  const dpr = Math.min(window.devicePixelRatio || 1, Math.sqrt(16.7e6 / (w * h)));
+  const dpr = effectiveDpr(w, h, window.devicePixelRatio);
   const mode = new URLSearchParams(location.search).get('worker');
   const transport = new Transport();
   const client = new RenderClient(transport.send, true, () => request());
@@ -101,8 +102,7 @@ function resize(): void {
   const w = stage.clientWidth;
   const h = stage.clientHeight;
   measure();
-  // Cap backing area at 16.7 Mpx (iOS Safari limit), spec 7.2.
-  const dpr = Math.min(window.devicePixelRatio || 1, Math.sqrt(16.7e6 / (w * h)));
+  const dpr = effectiveDpr(w, h, window.devicePixelRatio);
   activeCanvas.width = Math.round(w * dpr);
   activeCanvas.height = Math.round(h * dpr);
   activeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
