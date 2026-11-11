@@ -1,5 +1,7 @@
 // HUD controller: owns the state machine model, popup and stroke flags, and the timers. UI components only read signals.
 import { signal } from '@preact/signals';
+import { effect } from '@preact/signals';
+import { prefsStore } from '../app/prefsStore';
 import { hudInitial, hudNext, type HudEvent } from './hudState';
 
 export type Edge = 'bottom' | 'top' | 'left' | 'right';
@@ -7,7 +9,7 @@ export interface PillPos { edge: Edge; along: number }
 export type HudMode = 'floating' | 'proximity';
 
 const KEY = 'athanor.hud';
-function load(): { mode?: HudMode; pos?: PillPos; collapsed?: boolean; swatches?: boolean; pagesOpen?: boolean } {
+function load(): { pos?: PillPos; collapsed?: boolean; swatches?: boolean; pagesOpen?: boolean } {
   try {
     return JSON.parse(localStorage.getItem(KEY) ?? '{}');
   } catch {
@@ -18,8 +20,13 @@ function load(): { mode?: HudMode; pos?: PillPos; collapsed?: boolean; swatches?
 export function createHud() {
   const saved = load();
   const q = new URLSearchParams(location.search).get('hud');
-  /** Spec 8.3.2: focus mode with the floating pill is the default; `hud.mode = proximity` is the legacy top-edge reveal (1.4). */
-  const mode = signal<HudMode>(q === 'proximity' || q === 'floating' ? q : saved.mode === 'proximity' ? 'proximity' : 'floating');
+  /** Spec 8.3.2: the floating pill is the default; the `hudMode` pref `proximity` is the legacy top-edge reveal (1.4). */
+  const urlMode = q === 'proximity' || q === 'floating' ? q : null; // ?hud= overrides the pref for this page load
+  const mode = signal<HudMode>(urlMode ?? prefsStore.prefs.value.hudMode);
+  effect(() => {
+    const m = prefsStore.prefs.value.hudMode; // Settings, here or in another tab
+    if (!urlMode) mode.value = m;
+  });
   const pos = signal<PillPos>(saved.pos ?? { edge: 'bottom', along: 0.5 });
   const collapsed = signal(saved.collapsed ?? false);
   const swatchPanel = signal(saved.swatches ?? false);
@@ -27,7 +34,7 @@ export function createHud() {
   const announcement = signal('');
   const persist = (): void => {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ mode: mode.value, pos: pos.value, collapsed: collapsed.value, swatches: swatchPanel.value, pagesOpen: pagesOpen.value }));
+      localStorage.setItem(KEY, JSON.stringify({ pos: pos.value, collapsed: collapsed.value, swatches: swatchPanel.value, pagesOpen: pagesOpen.value }));
     } catch { /* storage unavailable: the toolbar still works, it just forgets */ }
   };
   const model = signal(hudInitial());

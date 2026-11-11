@@ -6,24 +6,8 @@ import type { Docs } from '../doc/docs';
 import type { RenderClient } from '../render/client';
 import type { Pages } from './pages';
 
-export const INTERVALS = [10, 30, 60, 120, 300] as const;
-const KEY = 'athanor.session';
-
-interface Prefs { intervalSec: number; autoClear: boolean; prefix: string }
-const DEFAULTS: Prefs = { intervalSec: 60, autoClear: false, prefix: 'session-' };
-
-const load = (): Prefs => {
-  try {
-    const p = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<Prefs>;
-    return {
-      intervalSec: INTERVALS.includes(p.intervalSec as never) ? (p.intervalSec as number) : DEFAULTS.intervalSec,
-      autoClear: p.autoClear === true,
-      prefix: typeof p.prefix === 'string' && p.prefix.length <= 40 ? p.prefix : DEFAULTS.prefix,
-    };
-  } catch {
-    return DEFAULTS; // blocked storage or a damaged value
-  }
-};
+import { INTERVALS, loadSessionPrefs, saveSessionPrefs } from './sessionPrefs';
+export { INTERVALS };
 
 const stamp = (d: Date): string => {
   const p = (n: number): string => String(n).padStart(2, '0');
@@ -31,7 +15,7 @@ const stamp = (d: Date): string => {
 };
 
 export function createSession(docs: Docs, pages: Pages, client: RenderClient, announce: (msg: string) => void, now: () => Date = () => new Date()) {
-  const prefs = load();
+  const prefs = loadSessionPrefs();
   const recording = signal(false);
   const intervalSec = signal(prefs.intervalSec);
   const autoClear = signal(prefs.autoClear);
@@ -43,11 +27,7 @@ export function createSession(docs: Docs, pages: Pages, client: RenderClient, an
   const seen = new Map<string, number>(); // page id -> revision at the last snapshot
   const last = new Map<string, string>(); // page id -> its newest snapshot, so snapshots accumulate in order
 
-  const save = (): void => {
-    try {
-      localStorage.setItem(KEY, JSON.stringify({ intervalSec: intervalSec.value, autoClear: autoClear.value, prefix: prefs.prefix }));
-    } catch { /* the setting just is not remembered */ }
-  };
+  const save = (): void => void saveSessionPrefs({ intervalSec: intervalSec.value, autoClear: autoClear.value, prefix: prefs.prefix });
 
   /** One interval: snapshot the open page if it changed. Never overlaps itself, and a failure only skips this round. */
   async function tick(): Promise<void> {

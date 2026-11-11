@@ -14,6 +14,8 @@
       canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
       #guides { pointer-events: none; }
       button { touch-action: manipulation; }
+      /* Settings > Interface > Reduced motion */
+      html[data-motion='reduce'] *, html[data-motion='reduce'] *::before, html[data-motion='reduce'] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
     </style>
   </head>
   <body>

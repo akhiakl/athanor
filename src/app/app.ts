@@ -21,8 +21,18 @@ export const rgbaColor = (rgba: number, a = rgba & 255): Color => {
 
 /** Committed-domain affects live in the render worker; they follow the active ones in the menu (and Mod+digit numbering). */
 const committedIds = ['affect.random', 'affect.smooth', 'affect.limit', 'affect.repeat'] as const;
-export const affectMenu: readonly string[] = [...affectModules.map((d) => d.id), ...committedIds];
-export const createMenu: readonly string[] = createModules.map((d) => d.id);
+/** The menus, in order. Mutable only through `hideModules`, which the editor calls once at start, before anything renders. */
+export const affectMenu: string[] = [...affectModules.map((d) => d.id), ...committedIds];
+export const createMenu: string[] = createModules.map((d) => d.id);
+
+/** Removes modules the user disabled in Settings from the menus (and so from the digit shortcuts). At least one create module stays. */
+export function hideModules(ids: readonly string[]): void {
+  const hide = new Set(ids);
+  const create = createMenu.filter((id) => !hide.has(id));
+  if (create.length > 0) createMenu.splice(0, createMenu.length, ...create);
+  const affects = affectMenu.filter((id) => !hide.has(id));
+  affectMenu.splice(0, affectMenu.length, ...affects);
+}
 
 const WHITE: Color = { h: 0, s: 0, b: 1, a: 255 };
 const DEFAULT_SWATCHES = [0x000000ff, 0xffffffff, 0xe63946ff, 0xf4a261ff, 0xf1fa3cff, 0x2a9d8fff, 0x1d70b8ff, 0x6a4c93ff, 0xff8fabff, 0x8d99aeff];
@@ -74,7 +84,7 @@ export function createApp(engine: Engine, client: RenderClient, stamps: ReturnTy
   }
 
   function selectCreate(i: number): void {
-    const d = createModules[i];
+    const d = createModules.find((m) => m.id === createMenu[i]);
     if (!d) return;
     createId.value = d.id;
     engine.select(d.make(paramsOf(d.id)));

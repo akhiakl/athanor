@@ -18,6 +18,8 @@
     position: fixed; inset: 0 0 auto 0; z-index: 3; pointer-events: none; user-select: none; -webkit-user-select: none;
     font: 13px/1.35 system-ui, -apple-system, 'Segoe UI', sans-serif; color: var(--fg); font-variant-numeric: tabular-nums;
   }
+  html[data-theme='light'] #hud { color-scheme: light; }
+  html[data-theme='dark'] #hud { color-scheme: dark; }
   @media (pointer: coarse) { #hud { --hit: 2.75rem; } }
   #hud ::selection { background: color-mix(in oklab, var(--accent) 35%, transparent); }
   #hud input { caret-color: var(--accent); accent-color: var(--accent); }

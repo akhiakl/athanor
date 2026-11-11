@@ -12,7 +12,7 @@ export const FORMAT_VERSION = 1;
 export const MAX_PAGES = 2000;
 
 interface ManifestPage { id: string; name: string; width: number; height: number; background: number; origin: PageRecord['origin'] }
-export interface Manifest { format: typeof FORMAT; version: number; name: string; createdAt: number; pages: ManifestPage[] }
+export interface Manifest { format: typeof FORMAT; version: number; /** the file's id when exported, so a backup restore can skip files that already exist */ id?: string; name: string; createdAt: number; pages: ManifestPage[] }
 
 export class ImportError extends Error {}
 
@@ -33,7 +33,7 @@ export async function exportAthanor(docs: Docs, fileId: string): Promise<Uint8Ar
     entries.push({ name: `pages/${p.id}.snap`, data: encodeSnapshot(store, header) });
   }
   const manifest: Manifest = {
-    format: FORMAT, version: FORMAT_VERSION, name: file.name, createdAt: file.createdAt,
+    format: FORMAT, version: FORMAT_VERSION, id: file.id, name: file.name, createdAt: file.createdAt,
     pages: pages.map(({ id, name, width, height, background, origin }) => ({ id, name, width, height, background, origin })),
   };
   return zip([{ name: 'manifest.json', data: enc.encode(JSON.stringify(manifest, null, 2)) }, ...entries]);
@@ -65,11 +65,14 @@ export function parseManifest(json: string): Manifest {
     if (p.origin !== 'user' && p.origin !== 'session') throw new ImportError('A page has an unknown origin.');
   }
   if (typeof o.name !== 'string') throw new ImportError('The file has no name.');
-  return { format: FORMAT, version: o.version, name: o.name, createdAt: Number.isFinite(o.createdAt) ? (o.createdAt as number) : 0, pages: o.pages as ManifestPage[] };
+  const id = typeof o.id === 'string' && /^[0-9A-Za-z_-]{1,64}$/.test(o.id) ? o.id : undefined;
+  return { format: FORMAT, version: o.version, ...(id ? { id } : {}), name: o.name, createdAt: Number.isFinite(o.createdAt) ? (o.createdAt as number) : 0, pages: o.pages as ManifestPage[] };
 }
 
-/** Imports as a new file with fresh ids. Nothing is written until every page has been validated. */
-export async function importAthanor(docs: Docs, bytes: Uint8Array): Promise<{ file: FileRecord; pages: PageRecord[] }> {
+interface ImportPage { name: string; width: number; height: number; background: number; origin: PageRecord['origin']; snapshot: Uint8Array }
+
+/** Reads and fully validates an .athanor file without touching storage. */
+function readAthanor(bytes: Uint8Array): { manifest: Manifest; pages: ImportPage[] } {
   let entries;
   try {
     entries = unzip(bytes, { maxEntries: MAX_PAGES + 1 });
@@ -94,5 +97,22 @@ export async function importAthanor(docs: Docs, bytes: Uint8Array): Promise<{ fi
     if (d.header.width !== p.width || d.header.height !== p.height) throw new ImportError(`Page "${p.name.slice(0, 40)}" does not match its manifest.`);
     return { name: p.name.slice(0, 200), width: p.width, height: p.height, background: p.background, origin: p.origin, snapshot: snap };
   });
+  return { manifest, pages };
+}
+
+/** Imports as a new file under fresh ids. Nothing is written until every page has been validated. */
+export async function importAthanor(docs: Docs, bytes: Uint8Array): Promise<{ file: FileRecord; pages: PageRecord[] }> {
+  const { manifest, pages } = readAthanor(bytes);
   return docs.importFile(manifest.name.slice(0, 200) || 'Imported', pages);
+}
+
+/**
+ * Restores a file from a backup (8.6.3): when its original id is already stored (trashed files included) it is left alone and reported
+ * as skipped, so restoring the same backup twice changes nothing. A file without a recorded id is imported as a new file.
+ */
+export async function restoreAthanor(docs: Docs, bytes: Uint8Array): Promise<{ file: FileRecord; pages: PageRecord[] } | { skipped: string }> {
+  const { manifest, pages } = readAthanor(bytes);
+  const name = manifest.name.slice(0, 200) || 'Imported';
+  if (manifest.id && (await docs.hasFile(manifest.id))) return { skipped: name };
+  return docs.importFile(name, pages, manifest.id);
 }

@@ -1,8 +1,10 @@
 // Entry: picks what to load from the route. Home, settings and "new" load the shell only; the editor chunk (engine, render worker,
 // HUD) is imported on demand, so opening the file browser never starts a worker (spec 8.3).
+import { followAppearance } from './appearance';
 import { route } from './current';
 
 const stage = document.getElementById('stage') as HTMLElement;
+followAppearance(); // theme and motion prefs apply on every route
 
 async function main(): Promise<void> {
   if (route.name === 'editor') {

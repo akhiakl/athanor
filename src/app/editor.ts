@@ -15,7 +15,10 @@ import { Transport } from '../render/transport';
 import { copyCanvas, defaultScale } from './exporter';
 import { Docs } from '../doc/docs';
 import { lazyIdbStorage } from '../doc/idb';
-import { createApp } from './app';
+import { createApp, hideModules } from './app';
+import { buildKeymap, type Keymap } from './keymap';
+import { prefsStore } from './prefsStore';
+import { setHintKeymap } from '../hud/keys';
 import { route } from './current';
 import { href } from './router';
 import { createPages } from './pages';
@@ -106,7 +109,17 @@ function createBackend(): { client: RenderClient; frame: () => boolean } {
 }
 
 const { client, frame: backendFrame } = createBackend();
-const engine = new Engine(seed, client);
+const startPrefs = prefsStore.prefs.value;
+hideModules(startPrefs.disabledModules); // before anything numbers or lists the modules
+const engine = new Engine(seed, client, startPrefs.inputRateHz);
+let keymap: Keymap = buildKeymap(startPrefs.keys);
+effect(() => {
+  const p = prefsStore.prefs.value; // Settings, here or in another tab
+  engine.attrs.smoothing = p.lineSmoothing;
+  engine.attrs.syntheticPressure = p.syntheticPressure;
+  keymap = buildKeymap(p.keys);
+  setHintKeymap(keymap);
+});
 engine.view.w = stage.clientWidth;
 engine.view.h = stage.clientHeight;
 
@@ -318,7 +331,7 @@ const mac = isMac();
 window.addEventListener('keydown', (ev) => {
   if (isTextEntry(ev.target as HTMLElement | null)) return;
   const mod = mac ? ev.metaKey : ev.ctrlKey;
-  const a = matchShortcut(ev.code, { mod, shift: ev.shiftKey, alt: ev.altKey });
+  const a = matchShortcut(ev.code, { mod, shift: ev.shiftKey, alt: ev.altKey }, keymap);
   if (a) {
     // Tab and Space keep their native meaning (focus traversal, button activation) inside the HUD
     if (a.t === 'export' || a.t === 'copy') {

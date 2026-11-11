@@ -4,9 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { download } from '../app/download';
 import { exportAthanor, importAthanor } from '../doc/athanorFile';
 import type { Docs, FileRecord } from '../doc/docs';
-import { zip } from '../doc/zip';
+import { backupAll } from '../doc/backup';
 import { href } from '../app/router';
-import { filterFiles, formatBytes, relativeTime, safeFileName, sortFiles, uniqueNames, type Sort } from './model';
+import { filterFiles, formatBytes, relativeTime, safeFileName, sortFiles, type Sort } from './model';
 import { templates } from './templates';
 
 const LAST_BACKUP = 'athanor.lastBackup';
@@ -87,14 +87,11 @@ export function Home({ docs }: { docs: Docs }) {
   const reminder = (files?.length ?? 0) > 0 && unbacked && now - backup > WEEK;
 
   const backUpAll = (): Promise<void> => guard(async () => {
-    const all = files ?? [];
-    const names = uniqueNames(all.map((f) => f.name), '.athanor');
-    const entries = [];
-    for (let i = 0; i < all.length; i++) entries.push({ name: names[i], data: await exportAthanor(docs, all[i].id) });
-    download(new Blob([zip(entries) as BlobPart], { type: 'application/zip' }), `athanor-backup-${new Date().toISOString().slice(0, 10)}.zip`);
+    const { bytes, count } = await backupAll(docs);
+    download(new Blob([bytes as BlobPart], { type: 'application/zip' }), `athanor-backup-${new Date().toISOString().slice(0, 10)}.zip`);
     try { localStorage.setItem(LAST_BACKUP, String(Date.now())); } catch { /* the reminder just comes back */ }
     setBackup(Date.now());
-    say(`Backed up ${all.length} file${all.length === 1 ? '' : 's'}.`);
+    say(`Backed up ${count} file${count === 1 ? '' : 's'}.`);
   });
 
   const rename = (f: FileRecord, name: string): Promise<void> => guard(async () => {
@@ -122,6 +119,7 @@ export function Home({ docs }: { docs: Docs }) {
         <div class="actions">
           <button type="button" class="primary" onClick={() => location.assign(href.newFile('blank'))}>New file</button>
           <button type="button" onClick={() => pick.current?.click()}>Import</button>
+          <a class="button" href={href.settings()}>Settings</a>
           <input ref={pick} type="file" hidden accept=".athanor,.zip" aria-label="Import an .athanor file"
             onChange={(e) => { const f = e.currentTarget.files?.[0]; e.currentTarget.value = ''; if (f) void importFile(f); }} />
         </div>
