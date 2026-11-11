@@ -3,7 +3,7 @@ import { ActiveArena, F_GRADIENT, H, HDR_STRIDE } from '../core/arena';
 import { applyAffine } from '../core/transform';
 import type { Shape } from '../render/batch';
 
-function setBounds(a: ActiveArena, db: number, vtxOff: number, n: number): void {
+export function setBounds(a: ActiveArena, db: number, vtxOff: number, n: number): void {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (let i = 0; i < n; i++) {
     const x = a.vtx[2 * (vtxOff + i)];

@@ -115,6 +115,8 @@ describe('T5 Displace', () => {
     ev(ring, 1, 1, 10, PHASE_MOVE); // delta (1,1): speed 5
     e.tick(ring);
     close4(rec(e, e.current()).vtx, [-5, 0, 15, 0]);
+    const hf = e.arena.hdrF, hb = e.current() * HDR_STRIDE; // bounds follow the displaced vertices
+    expect([hf[hb + H.BB_MIN_X], hf[hb + H.BB_MAX_X]]).toEqual([-5, 15]);
     ev(ring, 4, 5, 20, PHASE_MOVE); // delta (3,4): speed 0, nothing moves
     e.tick(ring);
     close4(rec(e, e.current()).vtx, [-5, 0, 15, 0]);

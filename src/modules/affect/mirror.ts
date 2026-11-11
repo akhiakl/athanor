@@ -11,6 +11,14 @@ import type { AffectModule } from '../../engine/engine';
 export function mirror({ horizontal = true, vertical = false } = {}): AffectModule & { setAxis(x: number, y: number): void } {
   let ax = NaN;
   let by = NaN;
+  const k = (horizontal ? 1 : 0) + (vertical ? 1 : 0) + (horizontal && vertical ? 1 : 0);
+  const mats: number[][] = [];
+  const build = (): void => { // rebuilt only when the axis moves, so the per-tick pass allocates nothing
+    mats.length = 0;
+    if (horizontal) mats.push([-1, 0, 0, 1, 2 * ax, 0]);
+    if (vertical) mats.push([1, 0, 0, -1, 0, 2 * by]);
+    if (horizontal && vertical) mats.push([-1, 0, 0, -1, 2 * ax, 2 * by]);
+  };
   const self: AffectModule & { setAxis(x: number, y: number): void } = {
     id: 'affect.mirror',
     order: 2,
@@ -18,18 +26,15 @@ export function mirror({ horizontal = true, vertical = false } = {}): AffectModu
     setAxis(x, y) {
       ax = x;
       by = y;
+      build();
     },
     affect(e) {
       if (Number.isNaN(ax)) {
         ax = idiv(e.view.w, 2);
         by = idiv(e.view.h, 2);
+        build();
       }
-      const k = (horizontal ? 1 : 0) + (vertical ? 1 : 0) + (horizontal && vertical ? 1 : 0);
       if (k === 0) return;
-      const mats: number[][] = [];
-      if (horizontal) mats.push([-1, 0, 0, 1, 2 * ax, 0]);
-      if (vertical) mats.push([1, 0, 0, -1, 0, 2 * by]);
-      if (horizontal && vertical) mats.push([-1, 0, 0, -1, 2 * ax, 2 * by]);
       for (let i = 0; i < e.createCount; i++) {
         const src = e.create[i];
         if (e.arena.hdr[src * HDR_STRIDE + H.VTX_COUNT] === 0) continue;

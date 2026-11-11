@@ -1,5 +1,6 @@
 import { CUBIC, CLOSE, H, HDR_STRIDE, LINE, MOVE, QUAD } from '../../core/arena';
 import { recomputeEdges } from '../../core/shape';
+import { setBounds } from '../../engine/clone';
 import type { AffectModule, Engine } from '../../engine/engine';
 
 const MAX_QUEUED = 64;
@@ -44,6 +45,7 @@ function push(e: Engine, r: number, speed: number): void {
       case CLOSE: break;
     }
   }
+  setBounds(a, b, off, count); // the active layer clips to these bounds, so they must follow the moved vertices
 }
 
 /**

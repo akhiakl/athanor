@@ -212,7 +212,7 @@ function toggleActive(id: string): void {
 }
 
 window.addEventListener('keydown', (ev) => {
-  if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.repeat) return; // OS auto-repeat would flip toggles at random
   const k = ev.key.toLowerCase();
   if (!down) {
     const n = Number(ev.key);
