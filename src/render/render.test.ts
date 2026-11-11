@@ -7,7 +7,7 @@ import { shapes } from '../modules/create/shapes';
 import { stroke } from '../test/helpers';
 import { ActiveRenderer } from './active';
 import { packBatch, unpackBatch } from './batch';
-import { MainThreadRenderCore } from './core';
+import { RenderCore } from './core';
 import { rgbaToCss, type Ctx2D } from './draw';
 
 /** Records every call as a string; properties are plain fields. */
@@ -71,7 +71,7 @@ describe('unpackBatch validation', () => {
 describe('drawing', () => {
   it('maps the command stream and stroke style (round cap, bevel join)', () => {
     const ctx = mockCtx();
-    const core = new MainThreadRenderCore(ctx);
+    const core = new RenderCore(ctx);
     const a = new ActiveArena();
     const r = a.alloc();
     newShape(a, r, 0, 0, 0xff000080, 2);
@@ -91,10 +91,10 @@ describe('drawing', () => {
   });
 });
 
-describe('MainThreadRenderCore + Engine', () => {
+describe('RenderCore + Engine', () => {
   it('a committed stroke lands in the log and on the committed canvas, then the active layer clears', () => {
     const committed = mockCtx();
-    const core = new MainThreadRenderCore(committed);
+    const core = new RenderCore(committed);
     const e = new Engine(1, core);
     e.select(shapes());
     const activeCtx = mockCtx();
@@ -108,7 +108,7 @@ describe('MainThreadRenderCore + Engine', () => {
   });
   it('clear and redraw replay the log over the background', () => {
     const ctx = mockCtx();
-    const core = new MainThreadRenderCore(ctx, '#fff');
+    const core = new RenderCore(ctx, '#fff');
     core.store.setSize(100, 50);
     const e = new Engine(1, core);
     e.select(shapes());
@@ -125,7 +125,7 @@ describe('MainThreadRenderCore + Engine', () => {
 describe('ActiveRenderer dirty rect', () => {
   it('clears the union of previous and current bounds, and nothing once idle', () => {
     const ctx = mockCtx();
-    const sinkCore = new MainThreadRenderCore(mockCtx());
+    const sinkCore = new RenderCore(mockCtx());
     const e = new Engine(1, sinkCore);
     e.select(shapes());
     const active = new ActiveRenderer();
@@ -143,7 +143,7 @@ describe('ActiveRenderer dirty rect', () => {
   });
   it('draws a Pressure ribbon on the active layer before it commits', () => {
     const ctx = mockCtx();
-    const e = new Engine(1, new MainThreadRenderCore(mockCtx()));
+    const e = new Engine(1, new RenderCore(mockCtx()));
     e.select(pressureShapes({ amount: 4 }));
     const active = new ActiveRenderer();
     e.beginSpine();
