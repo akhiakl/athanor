@@ -24,6 +24,7 @@ export function createHud() {
   const collapsed = signal(saved.collapsed ?? false);
   const swatchPanel = signal(saved.swatches ?? false);
   const flyout = signal(false);
+  const announcement = signal('');
   const persist = (): void => {
     try {
       localStorage.setItem(KEY, JSON.stringify({ mode: mode.value, pos: pos.value, collapsed: collapsed.value, swatches: swatchPanel.value }));
@@ -54,7 +55,12 @@ export function createHud() {
   }
 
   return {
-    model, height, popup, stroke, pickerOpen, mode, pos, collapsed, swatchPanel, flyout, persist,
+    model, height, popup, stroke, pickerOpen, mode, pos, collapsed, swatchPanel, flyout, persist, announcement,
+    /** Polite live-region message; cleared first so a repeated message is announced again. */
+    announce(msg: string): void {
+      announcement.value = '';
+      queueMicrotask(() => (announcement.value = msg));
+    },
     dispatch,
     /** Pointer moved over the stage (not the HUD): proximity. */
     move: (y: number): void => dispatch({ t: 'move', y, h: height.value, popup: popup.value !== null || pickerOpen.value, stroke: stroke.value }),

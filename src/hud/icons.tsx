@@ -23,3 +23,4 @@ export const IconPalette = () => (<svg {...base}><path d="M12 3a9 9 0 1 0 0 18c1
 export const IconStyle = () => (<svg {...base}><circle cx="12" cy="12" r="7.5" /><path d="M12 4.5a7.5 7.5 0 0 1 0 15z" fill="currentColor" stroke="none" /></svg>);
 /** Ring around a dot: collapses the toolbar to the dot it becomes. */
 export const IconCollapse = () => (<svg {...base}><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none" /></svg>);
+export const IconChevronUp = () => (<svg {...base} width={14} height={14}><path d="M6 15l6-6 6 6" /></svg>);

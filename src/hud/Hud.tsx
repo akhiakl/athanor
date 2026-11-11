@@ -91,7 +91,7 @@ export function SwatchBar({ app, hud }: { app: App; hud: Hud }) {
         <output>{c.a}</output>
       </label>
       <button
-        type="button" class="colour" aria-label={`Colour ${app.slot.value === 0 ? 'primary' : 'secondary'} ${hex(colorRgba(c))}`}
+        type="button" class="colour" data-picker-trigger aria-label={`Colour ${app.slot.value === 0 ? 'primary' : 'secondary'} ${hex(colorRgba(c))}`}
         style={{ '--c': hex(colorRgba(c)), '--a': String(c.a / 255) }}
         onPointerDown={() => { press.current = window.setTimeout(() => { press.current = -1; app.setSlot(1); hud.pickerOpen.value = true; }, 500); }}
         onPointerUp={() => { if (press.current > 0) { clearTimeout(press.current); app.setSlot(0); hud.pickerOpen.value = true; } press.current = 0; }}
@@ -190,8 +190,12 @@ export function HudView({ app, hud }: { app: App; hud: Hud }) {
     };
     const esc = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return;
+      // return focus to what opened it, so keyboard users are not dropped at the top of the page
+      const trigger = hud.popup.value ? document.querySelector<HTMLElement>('.menu > button[aria-expanded="true"]') : hud.flyout.value ? document.querySelector<HTMLElement>('button[aria-label="Module settings"]') : null;
       hud.popup.value = null;
       hud.flyout.value = false;
+      hud.pickerOpen.value = false;
+      trigger?.focus();
     };
     document.addEventListener('pointerdown', close);
     document.addEventListener('keydown', esc);
@@ -200,8 +204,19 @@ export function HudView({ app, hud }: { app: App; hud: Hud }) {
       document.removeEventListener('keydown', esc);
     };
   }, []);
+  const nowOn = app.affectsOn.value; // read in render so a change re-renders and runs the effect below
+  const nowCreate = app.createId.value;
+  const prev = useRef({ on: nowOn, create: nowCreate });
+  useEffect(() => {
+    // Every source (menu, shortcut, control) goes through here: say what happened for screen readers
+    const now = { on: nowOn, create: nowCreate };
+    for (const id of [...now.on, ...prev.current.on]) if (now.on.has(id) !== prev.current.on.has(id)) hud.announce(`${moduleUi[id].title} ${now.on.has(id) ? 'on' : 'off'}`);
+    if (now.create !== prev.current.create) hud.announce(`Create: ${moduleUi[now.create].title}`);
+    prev.current = now;
+  });
   return (
     <>
+      <div class="sr-only" role="status" aria-live="polite">{hud.announcement.value}</div>
       {hud.mode.value === 'floating' ? <FloatingView app={app} hud={hud} /> : <ProximityView app={app} hud={hud} />}
       <ColorPicker app={app} hud={hud} />
     </>
