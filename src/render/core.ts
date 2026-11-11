@@ -6,7 +6,7 @@ import { packBatch, unpackBatch } from './batch';
 import { CommittedStore } from './committed';
 import { drawShape, type Ctx2D } from './draw';
 import { pdfBlob } from './pdf';
-import { pngBlob, svgBlob, type ExportOptions, type MakeCanvas } from './export';
+import { pngBlob, svgBlob, thumbBlob, type ExportOptions, type MakeCanvas } from './export';
 import { HistoryLog } from './history';
 
 export class RenderCore implements CommitSink {
@@ -110,6 +110,11 @@ export class RenderCore implements CommitSink {
   /** The open page as a one-page PDF. `size` is the page size when known (the viewport otherwise). */
   exportPdf(size?: { width: number; height: number; background: number }): Blob {
     return pdfBlob([{ width: size?.width ?? this.store.width, height: size?.height ?? this.store.height, background: size?.background ?? 0xffffff, entries: this.store.entries }]);
+  }
+
+  exportThumb(width: number, make: MakeCanvas, size?: { width: number; height: number; background: number }): Promise<Blob> {
+    const o = this.exportOptions(false);
+    return thumbBlob(this.store.entries, size ? { ...o, width: size.width, height: size.height, background: `#${size.background.toString(16).padStart(6, '0')}` } : o, width, make);
   }
 
   exportPng(scale: number, transparent: boolean, make: MakeCanvas): Promise<Blob> {

@@ -64,19 +64,28 @@ export function createPages(docs: Docs, client: RenderClient, engine: Engine, si
     }
   }
 
-  /** Opens the last used file (or the newest, or a new one) at the page it was left on. */
-  async function boot(): Promise<void> {
-    const files = await docs.listFiles();
-    const last = readLast();
-    let f = files.find((x) => x.id === last) ?? files[0];
-    if (!f) {
-      const { w, h } = size();
-      f = (await docs.createFile('Untitled', w, h)).file;
+  /**
+   * Opens the file a route names, at the page it asks for (or the one it was left on). Without a route (tests, embedding) it opens the
+   * last used file, the newest, or a new one. A file that is missing or in the trash throws NotFoundError so the caller can go home.
+   */
+  async function boot(want?: { fileId: string; pageId?: string }): Promise<void> {
+    let f: FileRecord | undefined;
+    if (want) {
+      f = await docs.getFile(want.fileId);
+      if (!f || f.deletedAt !== undefined) throw Object.assign(new Error('file not found'), { name: 'NotFoundError' });
+    } else {
+      const files = await docs.listFiles();
+      const last = readLast();
+      f = files.find((x) => x.id === last) ?? files[0];
+      if (!f) {
+        const { w, h } = size();
+        f = (await docs.createFile('Untitled', w, h)).file;
+      }
     }
     file.value = f;
     writeLast(f.id);
     pages.value = await docs.pages(f.id);
-    await show(pages.value.find((p) => p.id === f.lastPageId)?.id ?? pages.value[0].id);
+    await show(pages.value.find((p) => p.id === (want?.pageId ?? f.lastPageId))?.id ?? pages.value.find((p) => p.id === f.lastPageId)?.id ?? pages.value[0].id);
     ready.value = true;
   }
 

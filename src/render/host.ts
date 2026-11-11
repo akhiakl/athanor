@@ -176,6 +176,12 @@ export class RenderHost {
   private runExport(core: RenderCore, m: Extract<ToWorker, { type: 'export' }>): void {
     const fail = (err: unknown): void => this.post({ type: 'exportError', id: m.id, message: err instanceof Error ? err.message : String(err) });
     try {
+      if (m.format === 'thumb') {
+        const make = this.opts.makeCanvas ?? (typeof OffscreenCanvas !== 'undefined' ? (w: number, h: number) => new OffscreenCanvas(w, h) as unknown as ReturnType<MakeCanvas> : null);
+        if (!make) throw new Error('thumbnails need OffscreenCanvas');
+        core.exportThumb(m.scale, make, this.page).then((blob) => this.post({ type: 'exportResult', id: m.id, blob }), fail);
+        return;
+      }
       if (m.format === 'pdf') {
         this.post({ type: 'exportResult', id: m.id, blob: core.exportPdf(this.page) });
         return;

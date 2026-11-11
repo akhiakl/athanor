@@ -125,6 +125,21 @@ describe('pages controller', () => {
     client.onSave?.('saved');
     expect(pages.save.value).toBe('saved');
   });
+  it('boots the file and page a route names, and throws NotFoundError for a missing or trashed file', async () => {
+    const s = setup();
+    const a = await s.docs.createFile('A', 800, 600);
+    const p2 = await s.docs.addPage(a.file.id);
+    await s.pages.boot({ fileId: a.file.id, pageId: a.page.id });
+    expect(s.pages.current.value).toBe(a.page.id); // the page asked for, not the last used
+    await s.pages.show(p2.id);
+    await s.pages.boot({ fileId: a.file.id });
+    expect(s.pages.current.value).toBe(p2.id); // no page given: where it was left
+    await s.pages.boot({ fileId: a.file.id, pageId: 'nope' });
+    expect(s.pages.current.value).toBe(p2.id); // an unknown page falls back
+    await expect(s.pages.boot({ fileId: 'missing' })).rejects.toMatchObject({ name: 'NotFoundError' });
+    await s.docs.trashFile(a.file.id);
+    await expect(s.pages.boot({ fileId: a.file.id })).rejects.toMatchObject({ name: 'NotFoundError' });
+  });
   it('reopen loads the current page again (after the worker was replaced)', async () => {
     const { pages, opened } = setup();
     await pages.boot();

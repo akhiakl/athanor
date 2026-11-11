@@ -220,7 +220,7 @@ export function HudView({ app, hud, exp }: { app: App; hud: Hud; exp: ExportCont
   return (
     <>
       <div class="sr-only" role="status" aria-live="polite">{hud.announcement.value}</div>
-      {hud.mode.value === 'floating' ? <FloatingView app={app} hud={hud} pages={exp.pages} session={exp.session} /> : <ProximityView app={app} hud={hud} />}
+      {hud.mode.value === 'floating' ? <FloatingView app={app} hud={hud} pages={exp.pages} session={exp.session} goHome={exp.goHome} /> : <ProximityView app={app} hud={hud} />}
       <ColorPicker app={app} hud={hud} />
       <PagesPanel pages={exp.pages} hud={hud} />
       <ExportDialog app={app} hud={hud} client={exp.client} size={exp.size} dpr={exp.dpr} pages={exp.pages} />

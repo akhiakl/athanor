@@ -1,5 +1,8 @@
 // Export actions on the main thread: file download and clipboard copy (spec 3.4, 3.4.4). Serialization itself runs in the render worker.
 import { maxScale } from '../render/export';
+import { download } from './download';
+
+export { download };
 import type { RenderClient } from '../render/client';
 
 export type Format = 'png' | 'svg' | 'pdf';
@@ -13,19 +16,6 @@ export function exportName(format: Format, d = new Date()): string {
 
 /** The default scale: the device pixel ratio, kept inside 1..4 and the canvas area limit. */
 export const defaultScale = (w: number, h: number, dpr: number): number => Math.min(Math.max(1, Math.round(dpr)), maxScale(w, h));
-
-/** Hidden <a download> on an object URL, revoked after 10 s (3.4). */
-export function download(blob: Blob, name: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  a.hidden = true;
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
 
 export async function downloadExport(client: RenderClient, r: ExportRequest): Promise<void> {
   download(await client.export(r.format, { scale: r.scale, transparent: r.transparent }), exportName(r.format));
