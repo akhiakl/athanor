@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { affectMenu, colorRgba, createMenu, type App } from '../app/app';
 import { moduleUi } from '../app/controls';
 import { Menu, SubBar, SwatchBar } from './Hud';
-import { IconCollapse, IconFlask, IconGrip, IconLayers, IconMinus, IconPalette, IconPlus, IconSliders, IconStyle, IconToolbar, IconTrash } from './icons';
+import { IconCollapse, IconFlask, IconGrip, IconLayers, IconMinus, IconPalette, IconPlus, IconSliders, IconPen, IconStyle, IconTrash } from './icons';
 import { affectHint, createHint, modLabel } from './keys';
 import { isHoriz, nudge, placementStyle, snap } from './placement';
 import type { Hud } from './hud';
@@ -146,13 +146,12 @@ export function FloatingView({ app, hud }: { app: App; hud: Hud }) {
   const common = { 'data-edge': edge, style: { ...style, opacity: drawing ? 0.15 : 1, pointerEvents: drawing ? 'none' : 'auto' } } as const;
 
   if (hud.collapsed.value) {
-    // Round, minimal: the toolbar glyph with a badge in the current colour. The label slides out on hover or focus,
+    // Round, minimal: a pencil, which reads as "drawing tools" at a glance. The label slides out on hover or focus,
     // and once for a moment after collapsing so the first time it explains itself.
     return (
       <div id="hud-bars" class="floating collapsed" {...common}>
-        <button type="button" class="launcher" aria-label="Show toolbar" title={`Show toolbar (${modLabel}.)`} onClick={toggleCollapse} style={{ '--c': hex(colorRgba(c)), '--a': String(c.a / 255) }}>
-          <IconToolbar />
-          <span class="chip-dot" aria-hidden="true" />
+        <button type="button" class="launcher" aria-label="Show toolbar" title={`Show toolbar (${modLabel}.)`} onClick={toggleCollapse}>
+          <IconPen />
           <span class="launcher-label" aria-hidden="true">Tools</span>
         </button>
     </div>
