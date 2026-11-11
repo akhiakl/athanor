@@ -278,6 +278,9 @@ describe('export over the protocol', () => {
     expect(await svg.text()).toContain('<path ');
     const png = await client.export('png', { scale: 2 });
     expect(png.type).toBe('image/png');
+    const pdf = await client.export('pdf');
+    expect(pdf.type).toBe('application/pdf');
+    expect(await pdf.text()).toMatch(/^%PDF-1\.4/);
   });
   it('rejects when the host cannot export', async () => {
     const r = rig({ worker: true });
@@ -351,9 +354,24 @@ describe('pages and autosave over the protocol', () => {
   });
   it('flushPage with nothing open or nothing pending still answers', async () => {
     const { client } = rig({ worker: true, storage: new MemoryStorage() });
-    await expect(client.flushPage()).resolves.toBeUndefined(); // no page open yet
+    await expect(client.flushPage()).resolves.toEqual({ revision: 0 }); // no page open yet
     await client.openPage(pageA);
-    await expect(client.flushPage()).resolves.toBeUndefined(); // nothing changed
+    await expect(client.flushPage()).resolves.toEqual({ revision: 0 }); // nothing changed
+  });
+  it('flush reports a revision that moves with every change and resets per page', async () => {
+    const { client } = rig({ worker: true, storage: new MemoryStorage() });
+    await client.openPage(pageA);
+    const e = new Engine(1, client);
+    e.select(shapes());
+    const r0 = (await client.flushPage()).revision;
+    draw(e);
+    const r1 = (await client.flushPage()).revision;
+    expect(r1).toBeGreaterThan(r0);
+    expect((await client.flushPage()).revision).toBe(r1); // unchanged between two reads
+    client.undo();
+    expect((await client.flushPage()).revision).toBeGreaterThan(r1); // undo is a change too
+    await client.openPage(pageB);
+    expect((await client.flushPage()).revision).toBe(0);
   });
   it('commits sent while a page is loading land on the new page', async () => {
     const mem = new MemoryStorage();

@@ -1,7 +1,9 @@
 // Pages controller: the open file's pages as signals, and the operations on them (spec 8.4). It talks to Docs for records and to the
 // render client for the open page's drawing, so a switch saves the page it leaves and loads the one it enters.
 import { signal } from '@preact/signals';
+import { exportAthanor, importAthanor } from '../doc/athanorFile';
 import type { Docs, FileRecord, PageRecord } from '../doc/docs';
+import { pagesPdf } from '../doc/pagesPdf';
 import type { Engine } from '../engine/engine';
 import type { RenderClient } from '../render/client';
 
@@ -78,6 +80,39 @@ export function createPages(docs: Docs, client: RenderClient, engine: Engine, si
     ready.value = true;
   }
 
+  /** Switches to another file, opened at its last page. */
+  async function openFile(fileId: string): Promise<void> {
+    const f = await docs.getFile(fileId);
+    if (!f) throw new Error('file not found');
+    await client.flushPage().catch(() => {}); // the page being left is saved before its file changes
+    file.value = f;
+    writeLast(f.id);
+    pages.value = await docs.pages(f.id);
+    await show(pages.value.find((p) => p.id === f.lastPageId)?.id ?? pages.value[0].id);
+  }
+
+  /** The file as `.athanor` bytes, current to the last stroke. */
+  async function exportFile(): Promise<{ bytes: Uint8Array; name: string }> {
+    if (!file.value) throw new Error('no file is open');
+    await client.flushPage();
+    return { bytes: await exportAthanor(docs, file.value.id), name: file.value.name };
+  }
+
+  /** Imports a `.athanor` file as a new file and opens it. Throws ImportError with a message fit to show. */
+  async function importFile(bytes: Uint8Array): Promise<string> {
+    const { file: imported } = await importAthanor(docs, bytes);
+    await openFile(imported.id);
+    return imported.name;
+  }
+
+  /** Every page of the file (or just the open one) as one PDF. */
+  async function pdf(all: boolean): Promise<Blob> {
+    if (!file.value) throw new Error('no file is open');
+    await client.flushPage();
+    const list = all ? pages.value : pages.value.filter((p) => p.id === current.value);
+    return pagesPdf(docs, list, file.value.name);
+  }
+
   /** After the render side was replaced (the worker failed and the local host took over): load the page again. */
   async function reopen(): Promise<void> {
     if (current.value) await show(current.value);
@@ -132,6 +167,6 @@ export function createPages(docs: Docs, client: RenderClient, engine: Engine, si
     announce(`Page ${i + 1} of ${pages.value.length}`);
   }
 
-  return { file, pages, current, ready, save, saveMessage, boot, reopen, show, add, duplicate, remove, rename, move, step, index };
+  return { file, pages, current, ready, save, saveMessage, boot, reopen, reload, openFile, exportFile, importFile, pdf, show, add, duplicate, remove, rename, move, step, index };
 }
 export type Pages = ReturnType<typeof createPages>;

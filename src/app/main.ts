@@ -17,6 +17,7 @@ import { Docs } from '../doc/docs';
 import { lazyIdbStorage } from '../doc/idb';
 import { createApp } from './app';
 import { createPages } from './pages';
+import { createSession } from './session';
 import { isMac, isTextEntry, matchShortcut } from './shortcuts';
 import { lockViewport } from './viewport';
 
@@ -136,11 +137,14 @@ client.onHistory = (u, r) => {
   app.canUndo.value = u;
   app.canRedo.value = r;
 };
-const pages = createPages(new Docs(lazyIdbStorage()), client, engine, () => ({ w: engine.view.w, h: engine.view.h }), (m) => hud.announce(m));
+const docs = new Docs(lazyIdbStorage());
+const pages = createPages(docs, client, engine, () => ({ w: engine.view.w, h: engine.view.h }), (m) => hud.announce(m));
+const session = createSession(docs, pages, client, (m) => hud.announce(m));
 afterFallback = () => void pages.reopen();
 mountHud(document.getElementById('hud')!, app, hud, {
   client,
   pages,
+  session,
   size: () => ({ w: engine.view.w, h: engine.view.h }),
   dpr: () => effectiveDpr(engine.view.w, engine.view.h, window.devicePixelRatio),
 });
@@ -303,6 +307,11 @@ window.addEventListener('keydown', (ev) => {
       }
       return;
     }
+    if (a.t === 'record') {
+      ev.preventDefault();
+      if (!ev.repeat) void session.toggle();
+      return;
+    }
     if (a.t === 'pageNext' || a.t === 'pagePrev' || a.t === 'pageNew' || a.t === 'pagesPanel') {
       ev.preventDefault();
       if (down || ev.repeat) return;
@@ -345,4 +354,4 @@ window.addEventListener('keydown', (ev) => {
 new ResizeObserver(resize).observe(stage);
 resize();
 
-if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__athanor = { engine, client, ring, app, hud, frame, pages };
+if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__athanor = { engine, client, ring, app, hud, frame, pages, session };

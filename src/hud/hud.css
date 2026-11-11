@@ -225,6 +225,8 @@
   .export small { color: var(--fg-dim); margin-inline-start: auto; }
   .export .scales { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 2px; border-radius: 11px; background: var(--hover); }
   #hud .export .scales button { min-inline-size: 0; }
+  .export fieldset.file { margin-block: 12px 0; }
+  .export fieldset.file .actions { margin-block-start: 0; }
   .export .hint { margin: 6px 0 0; font-size: 12px; color: var(--fg-dim); }
   .export .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-block-start: 12px; }
   #hud .export .actions button { box-shadow: inset 0 0 0 1px var(--line); }
@@ -256,6 +258,17 @@
   .pages-panel li:hover .row-actions, .pages-panel li:focus-within .row-actions { display: inline-flex; }
   @media (pointer: coarse) { .pages-panel .row-actions { display: inline-flex; } }
   #hud .pages-panel .row-actions button { min-inline-size: 1.8rem; min-block-size: 1.8rem; padding: 0; }
+  /* ---- Session recording ---- */
+  .rec-icon { position: relative; display: inline-grid; place-items: center; }
+  #hud button.rec.on { color: var(--danger); }
+  .rec-dot { position: absolute; inset-block-start: -1px; inset-inline-end: -3px; inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 2px var(--glass-solid); }
+  @media (prefers-reduced-motion: no-preference) { .rec-dot { animation: rec-pulse 500ms ease-out; } @keyframes rec-pulse { 0% { transform: scale(2.4); opacity: 0.4; } 100% { transform: scale(1); opacity: 1; } } }
+  .session-menu { display: grid; gap: 4px; }
+  .session-menu fieldset { border: 0; margin: 4px 0 0; padding: 4px 0 0; border-top: 1px solid var(--line); display: grid; gap: 1px; }
+  .session-menu legend { padding: 0 6px; font-size: 12px; color: var(--fg-dim); }
+  .session-menu > label { margin-block-start: 4px; padding-block-start: 4px; border-top: 1px solid var(--line); border-radius: 0; }
+  #hud .session-toggle { justify-content: flex-start; font-weight: 600; }
+  #hud .session-toggle[aria-pressed='true'] { color: var(--fg); }
   .sr-only { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
   .floating .flyout { max-block-size: 40dvh; overflow-y: auto; overscroll-behavior: contain; }
   @media (prefers-reduced-motion: no-preference) {

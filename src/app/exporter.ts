@@ -2,7 +2,7 @@
 import { maxScale } from '../render/export';
 import type { RenderClient } from '../render/client';
 
-export type Format = 'png' | 'svg';
+export type Format = 'png' | 'svg' | 'pdf';
 export interface ExportRequest { format: Format; scale: number; transparent: boolean }
 
 /** athanor-20261112-014503.png */
