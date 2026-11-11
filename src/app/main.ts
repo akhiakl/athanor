@@ -2,7 +2,8 @@
 // shortcut: dev-only keys (1-5 select module, C clears) until the real shortcut map and HUD land (step 4).
 import { InputRing, KIND_MOUSE, KIND_PEN, KIND_TOUCH, META_COALESCED, META_HW_PRESSURE, PHASE_CANCEL, PHASE_DOWN, PHASE_MOVE, PHASE_UP, packMeta } from '../core/inputRing';
 import { Engine } from '../engine/engine';
-import { createModules } from '../modules/registry';
+import { repeatStamps } from '../modules/affect/repeatStamps';
+import { affectModules, createModules } from '../modules/registry';
 import { ActiveRenderer } from '../render/active';
 import { RenderClient } from '../render/client';
 import { effectiveDpr } from '../render/dpr';
@@ -55,8 +56,10 @@ function createBackend(): { client: RenderClient; frame: () => boolean } {
   };
 
   if (mode !== '0' && typeof Worker !== 'undefined' && 'transferControlToOffscreen' in committedCanvas) {
-    const url = import.meta.env.DEV && mode === 'broken' ? '/render-worker-missing.js' : new URL('../render/worker.ts', import.meta.url);
-    const worker = new Worker(url, { type: 'module' });
+    // Both Worker constructions must stay literal: Vite only bundles the worker script when it sees `new Worker(new URL(...))`.
+    const worker = import.meta.env.DEV && mode === 'broken'
+      ? new Worker('/render-worker-missing.js', { type: 'module' })
+      : new Worker(new URL('../render/worker.ts', import.meta.url), { type: 'module' });
     const fail = (reason: string): void => {
       if (host) return;
       worker.terminate();
@@ -84,6 +87,19 @@ function createBackend(): { client: RenderClient; frame: () => boolean } {
 
 const { client, frame: backendFrame } = createBackend();
 const engine = new Engine(seed, client);
+engine.view.w = stage.clientWidth;
+engine.view.h = stage.clientHeight;
+
+// Repeat's stamps come back from the worker and wait in the main thread's affect range until placed.
+const stamps = repeatStamps();
+client.onRepeatClone = (shape) => {
+  if (engine.hasAffect(stamps.id)) stamps.add(engine, shape);
+  request();
+};
+client.onRepeatCommit = () => {
+  if (engine.hasAffect(stamps.id)) stamps.place(engine);
+  request();
+};
 const ring = new InputRing();
 const active = new ActiveRenderer();
 const epoch = performance.now();
@@ -107,6 +123,8 @@ function resize(): void {
   activeCanvas.width = Math.round(w * dpr);
   activeCanvas.height = Math.round(h * dpr);
   activeCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  engine.view.w = w;
+  engine.view.h = h;
   client.resize(w, h, dpr); // the committed canvas belongs to the backend
   request();
 }
@@ -121,7 +139,10 @@ function frame(): void {
   scheduled = false;
   engine.tick(ring);
   client.tick(engine.createCount);
-  active.render(activeCtx, engine, client.pending);
+  // Blindness hides both layers while drawing (5.4.10); the drawing still commits underneath.
+  const visibility = engine.flags.blind ? 'hidden' : 'visible';
+  activeCanvas.style.visibility = committedCanvas.style.visibility = visibility;
+  if (!engine.flags.blind) active.render(activeCtx, engine, client.pending);
   const more = backendFrame(); // local mode replays dirty tiles here; the worker does its own
   if (down || more) request(); // idle when no stroke is active (2.3 step 7)
 }
@@ -140,6 +161,7 @@ stage.addEventListener('pointerdown', (ev) => {
   measure(); // once per stroke, covers scroll/layout shifts
   down = true;
   write(ev, PHASE_DOWN);
+  client.event('down');
   request();
 });
 stage.addEventListener('pointermove', (ev) => {
@@ -166,18 +188,42 @@ const end = (phase: number) => (ev: PointerEvent) => {
 stage.addEventListener('pointerup', end(PHASE_UP));
 stage.addEventListener('pointercancel', end(PHASE_CANCEL));
 
-// dev-only toggles for the committed affects: R random, S smooth, L limit
-const toggles: Record<string, string | undefined> = { r: 'affect.random', s: 'affect.smooth', l: 'affect.limit' };
+// Dev-only keys until the HUD and the real shortcut map land (step 4): 1-5 create module, C clear,
+// committed affects Q random, W smooth, E limit, T repeat; active affects A displace, S gradient, D mirror, F colour switcher, G blindness.
+// R (Blindness reveal) and B (Repeat toggle) are the spec's own keys and are forwarded to the modules.
+const committedKeys: Record<string, string | undefined> = { q: 'affect.random', w: 'affect.smooth', e: 'affect.limit', t: 'affect.repeat' };
+const activeKeys: Record<string, string | undefined> = { a: 'affect.displace', s: 'affect.gradient', d: 'affect.mirror', f: 'affect.colorSwitcher', g: 'affect.blindness' };
+
+function toggleCommitted(id: string): void {
+  const on = !client.isAffectOn(id);
+  if (id === 'affect.repeat') {
+    if (on) engine.addAffect(stamps);
+    else {
+      stamps.place(engine); // keep what was stamped
+      engine.removeAffect(stamps.id);
+    }
+  }
+  client.setAffect(id, on);
+}
+
+function toggleActive(id: string): void {
+  if (engine.hasAffect(id)) engine.removeAffect(id);
+  else engine.addAffect(affectModules.find((d) => d.id === id)!.make());
+}
 
 window.addEventListener('keydown', (ev) => {
-  if (down || ev.ctrlKey || ev.metaKey || ev.altKey) return;
-  const n = Number(ev.key);
-  if (n >= 1 && n <= createModules.length) engine.select(createModules[n - 1].make());
-  else if (ev.key.toLowerCase() === 'c') client.clear();
-  else if (toggles[ev.key.toLowerCase()]) {
-    const id = toggles[ev.key.toLowerCase()]!;
-    client.setAffect(id, !client.isAffectOn(id));
+  if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  const k = ev.key.toLowerCase();
+  if (!down) {
+    const n = Number(ev.key);
+    if (n >= 1 && n <= createModules.length) engine.select(createModules[n - 1].make());
+    else if (k === 'c') client.clear();
+    else if (committedKeys[k]) toggleCommitted(committedKeys[k]!);
+    else if (activeKeys[k]) toggleActive(activeKeys[k]!);
   }
+  engine.key(ev.code, ev.key); // Blindness reveal (R)
+  client.event('key', ev.code); // Repeat toggle (B)
+  request();
 });
 
 new ResizeObserver(resize).observe(stage);

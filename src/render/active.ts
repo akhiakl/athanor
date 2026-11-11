@@ -1,5 +1,5 @@
 // Active-layer renderer with dirty-rect clearing, spec 2.4.
-import { H, HDR_STRIDE } from '../core/arena';
+import { H, HDR_STRIDE, MAX_RECORDS } from '../core/arena';
 import type { Engine } from '../engine/engine';
 import type { Shape } from './batch';
 import { drawRecord, drawShape, type Ctx2D } from './draw';
@@ -13,14 +13,16 @@ export class ActiveRenderer {
   private readonly now: Rect = { x0: 0, y0: 0, x1: 0, y1: 0 };
 
   private readonly bb = [0, 0, 0, 0];
+  private readonly recs = new Int32Array(2 * MAX_RECORDS);
 
   /** `pending`: shapes committed to the render worker but not yet acked; they stay visible here until the committed canvas shows them. */
   render(ctx: Ctx2D, e: Engine, pending: readonly Shape[] = []): void {
     const a = e.arena;
     const now = this.now;
     let any = false;
-    for (let i = 0; i < e.createCount; i++) {
-      const b = e.create[i] * HDR_STRIDE;
+    const n = e.activeRecords(this.recs); // create records, then affect records in module order
+    for (let i = 0; i < n; i++) {
+      const b = this.recs[i] * HDR_STRIDE;
       if (a.hdr[b + H.VTX_COUNT] === 0) continue;
       const pad = a.hdrF[b + H.LINE_WIDTH] / 2 + 2;
       const x0 = a.hdrF[b + H.BB_MIN_X] - pad;
@@ -48,12 +50,11 @@ export class ActiveRenderer {
     ctx.rect(x0, y0, x1 - x0, y1 - y0);
     ctx.clip();
     ctx.clearRect(x0, y0, x1 - x0, y1 - y0);
-    for (let i = 0; i < e.createCount; i++) {
-      const r = e.create[i];
+    for (let i = 0; i < n; i++) {
+      const r = this.recs[i];
       const b = r * HDR_STRIDE;
       if (a.hdr[b + H.VTX_COUNT] === 0) continue;
-      drawRecord(ctx, a.hdr[b + H.RGBA], a.hdr[b + H.FLAGS], a.hdrF[b + H.LINE_WIDTH],
-        a.cmd, a.hdr[b + H.CMD_OFF], a.hdr[b + H.CMD_COUNT], a.vtx, a.hdr[b + H.VTX_OFF]);
+      drawRecord(ctx, a.hdr, a.hdrF, r, a.cmd, a.hdr[b + H.CMD_OFF], a.hdr[b + H.CMD_COUNT], a.vtx, a.hdr[b + H.VTX_OFF]);
     }
     // Drawn twice (here and on the committed canvas) until the worker acks after its next frame. Spec 2.5 accepts one frame of this:
     // opaque strokes are unaffected, alpha < 1 can look darker. Acking sooner would let this copy vanish before the committed canvas

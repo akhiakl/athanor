@@ -1,7 +1,7 @@
 // RenderCore: committed-layer logic over a 2D context. Runs in the render worker, or on the main thread as the fallback (spec 2.6).
 import type { ActiveArena } from '../core/arena';
 import type { CommitSink } from '../engine/engine';
-import { createAffect, type AffectParams, type CommittedAffect } from './affects';
+import { createAffect, noIO, type AffectIO, type AffectParams, type CommittedAffect } from './affects';
 import { packBatch, unpackBatch } from './batch';
 import { CommittedStore } from './committed';
 import { drawShape, type Ctx2D } from './draw';
@@ -10,7 +10,7 @@ export class RenderCore implements CommitSink {
   readonly store = new CommittedStore();
   readonly affects: CommittedAffect[] = [];
 
-  constructor(private readonly ctx: Ctx2D, private background = '#ffffff') {}
+  constructor(private readonly ctx: Ctx2D, private background = '#ffffff', private readonly io: AffectIO = noIO) {}
 
   commit(a: ActiveArena, recs: Int32Array, n: number): void {
     this.commitBatch(packBatch(a, recs, n));
@@ -29,13 +29,18 @@ export class RenderCore implements CommitSink {
   setAffect(id: string, on: boolean, seed: number, params?: AffectParams): void {
     const i = this.affects.findIndex((a) => a.id === id);
     if (i >= 0) this.affects.splice(i, 1);
-    const af = on ? createAffect(id, seed, params) : null;
+    const af = on ? createAffect(id, seed, params, this.io) : null;
     if (af) this.affects.push(af);
   }
 
   /** Once per frame: committed affects that depend on in-flight shapes (Limit) see the active count. */
   tick(activeCount: number): void {
     for (const af of this.affects) af.tick?.(this.store, activeCount);
+  }
+
+  /** Pointer or key event for the affects that react to it (Repeat). */
+  event(name: 'down' | 'key', code?: string): void {
+    for (const af of this.affects) af.event?.(this.store, name, code);
   }
 
   /** Hover sample (buttons 0) for the committed-domain affects. */

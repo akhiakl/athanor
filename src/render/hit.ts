@@ -4,6 +4,13 @@ import type { Shape } from './batch';
 
 /** Bounds of every vertex (control points included, a safe superset), inflated by lineWidth/2 + 2 like the active layer. */
 export function shapeBBox(s: Shape, out: number[]): void {
+  shapeRawBounds(s, out);
+  const pad = s.hdrF[H.LINE_WIDTH] / 2 + 2;
+  out[0] -= pad; out[1] -= pad; out[2] += pad; out[3] += pad;
+}
+
+/** Bounds of every vertex with no stroke padding: x0, y0, x1, y1. */
+export function shapeRawBounds(s: Shape, out: number[]): void {
   const v = s.vtx;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (let i = 0; i < v.length; i += 2) {
@@ -12,8 +19,7 @@ export function shapeBBox(s: Shape, out: number[]): void {
     if (v[i + 1] < y0) y0 = v[i + 1];
     if (v[i + 1] > y1) y1 = v[i + 1];
   }
-  const pad = s.hdrF[H.LINE_WIDTH] / 2 + 2;
-  out[0] = x0 - pad; out[1] = y0 - pad; out[2] = x1 + pad; out[3] = y1 + pad;
+  out[0] = x0; out[1] = y0; out[2] = x1; out[3] = y1;
 }
 
 // Edge accumulation for the ray cast to +x. Module-level to keep the hover path allocation-free (single-threaded).

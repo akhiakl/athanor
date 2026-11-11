@@ -122,6 +122,21 @@ describe('tile membership under repeated touch', () => {
   });
 });
 
+describe('hitBBox', () => {
+  it('finds the newest shape whose bounds, grown by the margin, contain the point, across a tile edge', () => {
+    const st = new CommittedStore(256, 600, 600);
+    const a = st.add(square(100, 100)); // bounds 97.5 .. 112.5 with the stroke pad
+    expect(st.hitBBox(125, 105, 0)).toBe(-1);
+    expect(st.hitBBox(120, 105, 10)).toBe(a);
+    const b = st.add(square(105, 105));
+    expect(st.hitBBox(108, 108, 0)).toBe(b); // newest wins
+    st.remove(b);
+    expect(st.hitBBox(108, 108, 0)).toBe(a);
+    const c = st.add(square(250, 250, 12)); // straddles the tile edge at 256
+    expect(st.hitBBox(270, 255, 10)).toBe(c); // point in the next tile
+  });
+});
+
 describe('Random', () => {
   it('jitters segments in the cross band within +-0.15 v, never the MOVE point', () => {
     const st = new CommittedStore(256, 600, 600);
@@ -245,6 +260,7 @@ function counting(): Ctx2D & { fills: number; strokes: number } {
   const noop = () => {};
   const c = {
     fills: 0, strokes: 0, fillStyle: '', strokeStyle: '', lineWidth: 0, lineCap: 'butt', lineJoin: 'miter',
+    createLinearGradient: () => ({ addColorStop: noop }),
     beginPath: noop, moveTo: noop, lineTo: noop, quadraticCurveTo: noop, bezierCurveTo: noop, closePath: noop,
     stroke() { c.strokes++; }, fill: noop, fillRect() { c.fills++; }, clearRect: noop, rect: noop, clip: noop, save: noop, restore: noop,
   };

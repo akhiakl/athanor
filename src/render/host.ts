@@ -28,7 +28,7 @@ export class RenderHost {
   private acks: number[] = [];
 
   constructor(
-    private readonly post: (m: FromWorker) => void,
+    private readonly post: (m: FromWorker, transfer?: Transferable[]) => void,
     private readonly requestFrame: () => void,
     private readonly opts: HostOptions,
   ) {}
@@ -43,7 +43,10 @@ export class RenderHost {
       this.canvas = m.canvas as unknown as HostCanvas;
       this.ctx = this.canvas.getContext('2d', { alpha: false, desynchronized: true });
       if (!this.ctx) throw new Error('2d context unavailable');
-      this.core = new RenderCore(this.ctx);
+      this.core = new RenderCore(this.ctx, '#ffffff', {
+        clone: (buffer) => this.post({ type: 'repeatClone', buffer }, [buffer]),
+        commitAffects: () => this.post({ type: 'repeatCommit' }),
+      });
       this.seed = m.seed;
       this.resize(m.dpr, m.w, m.h);
       this.post({ type: 'ready' });
@@ -79,6 +82,9 @@ export class RenderHost {
           break;
         case 'affect':
           core.setAffect(m.id, m.on, this.seed, m.params);
+          break;
+        case 'event':
+          core.event(m.name, m.code);
           break;
       }
     } catch (err) {

@@ -141,6 +141,27 @@ export class CommittedStore {
     return -1;
   }
 
+  /** Newest live shape whose bounds, grown by `inflate`, contain the point (Repeat, 5.4.5). -1 when none. */
+  hitBBox(x: number, y: number, inflate: number): number {
+    const T = this.tile;
+    const tx0 = Math.max(0, Math.floor((x - inflate) / T)), tx1 = Math.min(this.cols - 1, Math.floor((x + inflate) / T));
+    const ty0 = Math.max(0, Math.floor((y - inflate) / T)), ty1 = Math.min(this.rows - 1, Math.floor((y + inflate) / T));
+    let best = -1;
+    for (let ty = ty0; ty <= ty1; ty++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        const list = this.tiles[ty * this.cols + tx];
+        for (let k = list.length - 1; k >= 0 && list[k] > best; k--) {
+          const e = this.entries[list[k]];
+          if (e.alive && x >= e.bb[0] - inflate && x <= e.bb[2] + inflate && y >= e.bb[1] - inflate && y <= e.bb[3] + inflate) {
+            best = list[k];
+            break;
+          }
+        }
+      }
+    }
+    return best;
+  }
+
   /** Ids registered on a tile, in log order. */
   tileIds(t: number): readonly number[] {
     return this.tiles[t];

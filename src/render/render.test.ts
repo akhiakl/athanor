@@ -16,6 +16,7 @@ function mockCtx(): Ctx2D & { calls: string[] } {
   const rec = (n: string) => (...a: number[]) => void calls.push(`${n}(${a.join(',')})`);
   return {
     calls, fillStyle: '', strokeStyle: '', lineWidth: 0, lineCap: 'butt', lineJoin: 'miter',
+    createLinearGradient: (...a: number[]) => { calls.push(`gradient(${a.join(',')})`); return { addColorStop: (o: number, c: string) => void calls.push(`stop(${o},${c})`) } as unknown as CanvasGradient; },
     beginPath: rec('beginPath'), moveTo: rec('moveTo'), lineTo: rec('lineTo'), quadraticCurveTo: rec('quad'),
     bezierCurveTo: rec('cubic'), closePath: rec('close'), stroke: () => void calls.push('stroke'),
     fill: (r?: string) => void calls.push(`fill(${r})`), fillRect: rec('fillRect'), clearRect: rec('clearRect'),
