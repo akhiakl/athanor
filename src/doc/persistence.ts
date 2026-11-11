@@ -8,6 +8,8 @@ import type { CommittedStore } from '../render/committed';
 import type { Storage } from './storage';
 
 const pad = (n: number): string => String(n).padStart(8, '0');
+/** Blob key of a page snapshot covering log chunks up to `seq`. */
+export const snapKey = (pageId: string, seq: number): string => `p:${pageId}:snap:${pad(seq)}`;
 const seqOf = (key: string): number => Number(key.slice(key.lastIndexOf(':') + 1));
 export const COMPACT_SLACK = 1024 * 1024;
 
@@ -25,7 +27,7 @@ export class PagePersistence {
   constructor(private readonly storage: Storage, readonly pageId: string, private readonly header: PageHeader) {}
 
   private key(kind: 'snap' | 'log', seq: number): string {
-    return `p:${this.pageId}:${kind}:${pad(seq)}`;
+    return kind === 'snap' ? snapKey(this.pageId, seq) : `p:${this.pageId}:log:${pad(seq)}`;
   }
 
   /** The newest snapshot plus the chunks after it, decoded; null for a page with nothing stored yet. */

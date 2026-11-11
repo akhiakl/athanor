@@ -7,6 +7,8 @@ type Op = { k: 'add' | 'remove' | 'revive' | 'mutate'; id: number };
 
 export class PageRecorder implements StoreObserver {
   private ops: Op[] = [];
+  /** Counts every change since this page was opened: two equal readings mean the page did not change in between. */
+  revision = 0;
 
   /** `onDirty` fires when the queue goes from empty to non-empty: the saver arms its timer there. */
   constructor(private readonly store: CommittedStore, private readonly onDirty: () => void = () => {}) {}
@@ -25,6 +27,7 @@ export class PageRecorder implements StoreObserver {
   }
 
   private note(op: Op): void {
+    this.revision++;
     this.ops.push(op);
     if (this.ops.length === 1) this.onDirty();
   }

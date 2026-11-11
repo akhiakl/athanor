@@ -47,6 +47,15 @@ describe('shortcut map (1.3.1)', () => {
     expect(matchShortcut('KeyZ', none)).toBeNull(); // plain Z is zoom, not bound yet
     expect(matchShortcut('KeyE', { ...mod, alt: true })).toBeNull();
   });
+  it('maps page navigation, the pages panel and session recording', () => {
+    expect(matchShortcut('PageDown', none)).toEqual({ t: 'pageNext' });
+    expect(matchShortcut('PageUp', none)).toEqual({ t: 'pagePrev' });
+    expect(matchShortcut('KeyN', { ...none, alt: true })).toEqual({ t: 'pageNew' });
+    expect(matchShortcut('Backslash', { ...none, mod: true })).toEqual({ t: 'pagesPanel' });
+    expect(matchShortcut('KeyR', { ...none, alt: true })).toEqual({ t: 'record' });
+    expect(matchShortcut('KeyR', none)).toBeNull(); // plain R stays Blindness reveal
+    expect(matchShortcut('KeyN', { ...none, alt: true, shift: true })).toBeNull();
+  });
   it('leaves Blindness R and Repeat B to the modules', () => {
     expect(matchShortcut('KeyR', none)).toBeNull();
     expect(matchShortcut('KeyB', none)).toBeNull();

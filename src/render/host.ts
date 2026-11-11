@@ -38,6 +38,7 @@ export class RenderHost {
   private lastHistory = { canUndo: false, canRedo: false };
   private storage: Promise<Storage> | null = null;
   private saver: PageSaver | null = null;
+  private page: { width: number; height: number; background: number } | undefined;
   private opening = false;
   private queued: ToWorker[] = [];
 
@@ -128,7 +129,7 @@ export class RenderHost {
   private pageMessage(core: RenderCore, m: Extract<ToWorker, { type: 'page' }>): void {
     if (m.op === 'flush') {
       const saver = this.saver;
-      const answer = (): void => this.post({ type: 'pageFlushed', id: m.id, error: saver?.status === 'error' ? saver.lastError?.message ?? 'save failed' : undefined });
+      const answer = (): void => this.post({ type: 'pageFlushed', id: m.id, revision: saver?.revision ?? 0, error: saver?.status === 'error' ? saver.lastError?.message ?? 'save failed' : undefined });
       if (saver) void saver.flush().then(answer, answer);
       else answer();
       return;
@@ -162,6 +163,7 @@ export class RenderHost {
     }
     core.resetPage();
     const header = { width: m.width, height: m.height, background: m.background };
+    this.page = header;
     const persistence = new PagePersistence(storage, m.pageId, header);
     const loaded = await persistence.load();
     if (loaded) core.history.silently(() => applySegments(core.store, loaded.segments)); // loading is not an undoable edit
@@ -174,6 +176,10 @@ export class RenderHost {
   private runExport(core: RenderCore, m: Extract<ToWorker, { type: 'export' }>): void {
     const fail = (err: unknown): void => this.post({ type: 'exportError', id: m.id, message: err instanceof Error ? err.message : String(err) });
     try {
+      if (m.format === 'pdf') {
+        this.post({ type: 'exportResult', id: m.id, blob: core.exportPdf(this.page) });
+        return;
+      }
       if (m.format === 'svg') {
         this.post({ type: 'exportResult', id: m.id, blob: core.exportSvg(m.transparent) });
         return;

@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { affectMenu, colorRgba, createMenu, type App } from '../app/app';
 import { moduleUi } from '../app/controls';
 import { Menu, SubBar, SwatchBar } from './Hud';
-import { IconCollapse, IconFlask, IconGrip, IconLayers, IconMinus, IconPalette, IconPlus, IconSliders, IconDownload, IconPages, IconPen, IconRedo, IconStyle, IconTrash, IconUndo } from './icons';
+import { IconCollapse, IconFlask, IconGrip, IconLayers, IconMinus, IconPalette, IconPlus, IconSliders, IconDownload, IconPages, IconPen, IconRecord, IconRedo, IconStyle, IconTrash, IconUndo } from './icons';
 import { affectHint, createHint, modLabel, shiftLabel } from './keys';
 import { isHoriz, nudge, placementStyle, snap } from './placement';
 import type { Pages } from '../app/pages';
+import { INTERVALS, type Session } from '../app/session';
 import type { Hud } from './hud';
 
 const hex = (rgba: number): string => `#${(rgba >>> 8).toString(16).padStart(6, '0')}`;
@@ -66,7 +67,7 @@ function useRoving(pill: { current: HTMLDivElement | null }, horiz: boolean) {
   };
 }
 
-export function FloatingView({ app, hud, pages }: { app: App; hud: Hud; pages: Pages }) {
+export function FloatingView({ app, hud, pages, session }: { app: App; hud: Hud; pages: Pages; session: Session }) {
   const pos = hud.pos.value;
   const { edge } = pos;
   const drag = useRef<{ dx: number; dy: number } | null>(null);
@@ -224,6 +225,26 @@ export function FloatingView({ app, hud, pages }: { app: App; hud: Hud; pages: P
           title={pages.save.value === 'error' ? `Not saved: ${pages.saveMessage.value}` : pages.save.value === 'saving' ? 'Saving…' : `Pages (${modLabel}\\) · saved`}
           data-save={pages.save.value} onClick={() => { hud.pagesOpen.value = !hud.pagesOpen.value; hud.persist(); }}
         ><IconPages /><span class="chip-label">{pages.index() + 1}/{pages.pages.value.length}</span><i class="save-dot" aria-hidden="true" /></button>
+        <Menu
+          id="session" hud={hud} label="" cls={session.recording.value ? 'rec on' : 'rec'} ariaLabel={session.recording.value ? 'Session recording, on' : 'Session recording, off'}
+          icon={<span class="rec-icon"><IconRecord />{session.recording.value && <i class="rec-dot" key={session.pulse.value} aria-hidden="true" />}</span>}
+        >
+          <div class="session-menu">
+            <button type="button" class="session-toggle" aria-pressed={session.recording.value} onClick={() => { void session.toggle(); hud.popup.value = null; }}>
+              {session.recording.value ? `Stop recording (${session.count.value})` : 'Start recording'}<kbd>Alt+R</kbd>
+            </button>
+            <fieldset>
+              <legend>Every</legend>
+              {INTERVALS.map((sec) => (
+                <label key={sec}>
+                  <input type="radio" name="interval" checked={session.intervalSec.value === sec} onChange={() => session.setInterval(sec)} />
+                  {sec < 60 ? `${sec} seconds` : `${sec / 60} minute${sec === 60 ? '' : 's'}`}
+                </label>
+              ))}
+            </fieldset>
+            <label><input type="checkbox" checked={session.autoClear.value} onChange={(e) => session.setAutoClear(e.currentTarget.checked)} />Clear the page after each snapshot</label>
+          </div>
+        </Menu>
         <button type="button" aria-haspopup="dialog" aria-label="Export" title={`Export (${modLabel}E)`} onClick={() => (hud.exportOpen.value = true)}><IconDownload /></button>
         {sep}
         <button

@@ -22,7 +22,8 @@ export type Action =
   | { t: 'pageNext' } // PageDown
   | { t: 'pagePrev' } // PageUp
   | { t: 'pageNew' } // Alt+N
-  | { t: 'pagesPanel' }; // Mod+Backslash
+  | { t: 'pagesPanel' } // Mod+Backslash
+  | { t: 'record' }; // Alt+R: session recording on or off
 
 export interface Mods { mod: boolean; shift: boolean; alt: boolean }
 
@@ -53,6 +54,7 @@ export function matchShortcut(code: string, { mod, shift, alt }: Mods): Action |
     }
   }
   if (alt && !shift && code === 'KeyN') return { t: 'pageNew' };
+  if (alt && !shift && code === 'KeyR') return { t: 'record' };
   if (alt) return code === 'Equal' ? { t: 'alpha', d: 10 } : code === 'Minus' ? { t: 'alpha', d: -10 } : null;
   if (shift) return code === 'KeyX' ? { t: 'swapColors' } : null;
   switch (code) {

@@ -27,7 +27,7 @@ export class RenderClient implements CommitSink {
   private affectsOn = new Set<string>();
   private nextExport = 1;
   private nextFlush = 1;
-  private readonly flushes = new Map<number, { resolve(): void; reject(e: Error): void }>();
+  private readonly flushes = new Map<number, { resolve(r: { revision: number }): void; reject(e: Error): void }>();
   private readonly opens = new Map<string, { resolve(r: { empty: boolean }): void; reject(e: Error): void }>();
   private readonly exports = new Map<number, { resolve(b: Blob): void; reject(e: Error): void }>();
 
@@ -59,7 +59,7 @@ export class RenderClient implements CommitSink {
       const f = this.flushes.get(m.id);
       this.flushes.delete(m.id);
       if (m.error) f?.reject(new Error(m.error));
-      else f?.resolve();
+      else f?.resolve({ revision: m.revision });
     } else if (m.type === 'historyState') this.onHistory?.(m.canUndo, m.canRedo);
     else if (m.type === 'exportResult' || m.type === 'exportError') {
       const p = this.exports.get(m.id);
@@ -127,7 +127,7 @@ export class RenderClient implements CommitSink {
    * Serializes the committed log in the render thread. Call it synchronously from the user gesture when the result feeds the
    * clipboard: the promise form of ClipboardItem keeps Safari's user activation (3.4.4).
    */
-  export(format: 'png' | 'svg', { scale = 1, transparent = false } = {}): Promise<Blob> {
+  export(format: 'png' | 'svg' | 'pdf', { scale = 1, transparent = false } = {}): Promise<Blob> {
     const id = this.nextExport++;
     return new Promise((resolve, reject) => {
       this.exports.set(id, { resolve, reject });
@@ -147,8 +147,8 @@ export class RenderClient implements CommitSink {
     });
   }
 
-  /** Writes pending changes now. Resolves once they are stored; rejects if the write failed (the data stays queued for retry). */
-  flushPage(): Promise<void> {
+  /** Writes pending changes now. Resolves once they are stored, with the page's change counter; rejects if the write failed (the data stays queued for retry). */
+  flushPage(): Promise<{ revision: number }> {
     const id = this.nextFlush++;
     return new Promise((resolve, reject) => {
       this.flushes.set(id, { resolve, reject });

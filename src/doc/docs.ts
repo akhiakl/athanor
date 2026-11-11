@@ -1,6 +1,6 @@
 // Document model, spec 8.4: a file is an ordered list of fixed-size pages; each page is one canvas with its own log.
 // shortcut: no document-level undo for page operations (8.5.4), no trash purge, and thumbnails are not stored yet.
-import { PagePersistence } from './persistence';
+import { PagePersistence, snapKey } from './persistence';
 import type { Storage } from './storage';
 
 export interface FileRecord {
@@ -106,22 +106,59 @@ export class Docs {
     return page;
   }
 
-  /** Copies a page and its saved content right after it. */
+  private async copyBlobs(from: string, to: string): Promise<void> {
+    for (const prefix of [`p:${from}:snap:`, `p:${from}:log:`]) {
+      for (const k of await this.storage.blobKeys(prefix)) {
+        const b = await this.storage.getBlob(k);
+        if (b) await this.storage.putBlob(k.replace(`p:${from}:`, `p:${to}:`), b);
+      }
+    }
+  }
+
+  /** Copies a page and its saved content right after it, and shows it next. */
   async duplicatePage(pageId: string): Promise<PageRecord> {
     const src = await this.requirePage(pageId);
     const file = await this.requireFile(src.fileId);
     const copy: PageRecord = { ...src, id: this.id(), name: `${src.name} copy`, createdAt: this.now() };
-    for (const prefix of [`p:${src.id}:snap:`, `p:${src.id}:log:`]) {
-      for (const k of await this.storage.blobKeys(prefix)) {
-        const b = await this.storage.getBlob(k);
-        if (b) await this.storage.putBlob(k.replace(`p:${src.id}:`, `p:${copy.id}:`), b);
-      }
-    }
+    await this.copyBlobs(src.id, copy.id);
     await this.storage.putRecord('pages', copy);
     const order = file.pageOrder.slice();
     order.splice(order.indexOf(src.id) + 1, 0, copy.id);
     await this.touch(file, { pageOrder: order, lastPageId: copy.id });
     return copy;
+  }
+
+  /**
+   * A session snapshot (8.4): a copy of the page's saved content as a new page with origin 'session', placed after `afterId`
+   * (the previous snapshot, so they accumulate in order). The editor keeps showing the page it was on.
+   */
+  async snapshotPage(pageId: string, name: string, afterId: string = pageId): Promise<PageRecord> {
+    const src = await this.requirePage(pageId);
+    const file = await this.requireFile(src.fileId);
+    const snap: PageRecord = { ...src, id: this.id(), name, createdAt: this.now(), origin: 'session' };
+    await this.copyBlobs(src.id, snap.id);
+    await this.storage.putRecord('pages', snap);
+    const order = file.pageOrder.slice();
+    const at = order.indexOf(afterId);
+    order.splice(at < 0 ? order.length : at + 1, 0, snap.id);
+    await this.touch(file, { pageOrder: order });
+    return snap;
+  }
+
+  /** A new file from imported pages (each with its snapshot bytes), under fresh ids so nothing already stored is touched. */
+  async importFile(name: string, pages: { name: string; width: number; height: number; background: number; origin: PageRecord['origin']; snapshot: Uint8Array }[]): Promise<{ file: FileRecord; pages: PageRecord[] }> {
+    const t = this.now();
+    const fileId = this.id();
+    const records: PageRecord[] = [];
+    for (const p of pages) {
+      const rec = this.makePage(fileId, p.name, p.width, p.height, p.background, p.origin);
+      await this.storage.putBlob(snapKey(rec.id, 0), p.snapshot);
+      await this.storage.putRecord('pages', rec);
+      records.push(rec);
+    }
+    const file: FileRecord = { id: fileId, name, createdAt: t, updatedAt: t, pageOrder: records.map((r) => r.id), lastPageId: records[0].id };
+    await this.storage.putRecord('files', file);
+    return { file, pages: records };
   }
 
   /** Removes a page and its content. The last page of a file cannot be deleted. Returns the page to show next. */

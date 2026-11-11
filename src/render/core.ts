@@ -5,6 +5,7 @@ import { createAffect, noIO, type AffectIO, type AffectParams, type CommittedAff
 import { packBatch, unpackBatch } from './batch';
 import { CommittedStore } from './committed';
 import { drawShape, type Ctx2D } from './draw';
+import { pdfBlob } from './pdf';
 import { pngBlob, svgBlob, type ExportOptions, type MakeCanvas } from './export';
 import { HistoryLog } from './history';
 
@@ -104,6 +105,11 @@ export class RenderCore implements CommitSink {
 
   exportSvg(transparent: boolean): Blob {
     return svgBlob(this.store.entries, this.exportOptions(transparent));
+  }
+
+  /** The open page as a one-page PDF. `size` is the page size when known (the viewport otherwise). */
+  exportPdf(size?: { width: number; height: number; background: number }): Blob {
+    return pdfBlob([{ width: size?.width ?? this.store.width, height: size?.height ?? this.store.height, background: size?.background ?? 0xffffff, entries: this.store.entries }]);
   }
 
   exportPng(scale: number, transparent: boolean, make: MakeCanvas): Promise<Blob> {

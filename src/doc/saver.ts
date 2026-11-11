@@ -38,6 +38,10 @@ export class PageSaver {
     }, wait);
   }
 
+  get revision(): number {
+    return this.recorder.revision;
+  }
+
   get pending(): boolean {
     return this.recorder.dirty || this.backlog.length > 0;
   }

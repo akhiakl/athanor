@@ -193,7 +193,7 @@ export function createApp(engine: Engine, client: RenderClient, stamps: ReturnTy
         case 'undo': client.undo(); break;
         case 'redo': client.redo(); break;
         case 'hudFlip': bar.value = bar.value === 'main' ? 'swatch' : 'main'; break;
-        case 'hudToggle': case 'collapse': case 'export': case 'copy': case 'pageNext': case 'pagePrev': case 'pageNew': case 'pagesPanel': break; // the HUD, exporter and pages own these
+        case 'hudToggle': case 'collapse': case 'export': case 'copy': case 'pageNext': case 'pagePrev': case 'pageNew': case 'pagesPanel': case 'record': break; // the HUD, exporter and pages own these
       }
     });
     hooks.redraw();
