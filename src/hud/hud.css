@@ -159,14 +159,14 @@
   }
 
   /* ---- Colour picker dialog ---- */
-  .picker { color: var(--fg); inline-size: 15rem; padding: 14px; border-radius: 18px; border: 0; }
+  .picker { pointer-events: auto; /* #hud is pointer-events:none and the dialog inherits it */ color: var(--fg); inline-size: 15rem; padding: 14px; border-radius: 18px; border: 0; max-block-size: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain; }
   .picker::backdrop { background: rgb(0 0 0 / 0.32); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
   .picker label { display: grid; gap: 4px; margin-block-start: 12px; font-size: 12px; color: var(--fg-dim); }
   .picker .row { display: flex; flex-wrap: wrap; gap: 6px; margin-block: 12px; }
   #hud .picker .row button { inline-size: 1.35rem; block-size: 1.35rem; min-inline-size: 0; min-block-size: 0; padding: 0; }
   #hud .picker > button { inline-size: 100%; background: var(--accent); color: var(--on-accent); font-weight: 600; }
   @media (hover: hover) { #hud .picker > button:hover { background: color-mix(in oklab, var(--accent) 88%, var(--fg)); } }
-  .sv { position: relative; inline-size: 100%; aspect-ratio: 1; touch-action: none; cursor: crosshair; border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); }
+  .sv { position: relative; inline-size: 100%; aspect-ratio: 1; max-block-size: 34dvh; touch-action: none; cursor: crosshair; border-radius: 12px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); }
   .sv canvas { display: block; inline-size: 100%; block-size: 100%; }
   .sv i { position: absolute; inline-size: 16px; block-size: 16px; margin: -8px 0 0 -8px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.4); pointer-events: none; }
 

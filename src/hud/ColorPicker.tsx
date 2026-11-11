@@ -33,6 +33,14 @@ export function ColorPicker({ app, hud }: { app: App; hud: Hud }) {
   const open = hud.pickerOpen.value;
 
   useEffect(() => {
+    // Esc and light dismiss close a modal dialog natively; keep the signal in step or the next open is a no-op
+    const d = dialog.current!;
+    const sync = (): void => { hud.pickerOpen.value = false; };
+    d.addEventListener('close', sync);
+    return () => d.removeEventListener('close', sync);
+  }, []);
+
+  useEffect(() => {
     const d = dialog.current!;
     if (open && !d.open) d.showModal();
     else if (!open && d.open) d.close();
@@ -63,7 +71,7 @@ export function ColorPicker({ app, hud }: { app: App; hud: Hud }) {
   };
 
   return (
-    <dialog ref={dialog} class="picker" aria-label="Colour picker" onClose={() => (hud.pickerOpen.value = false)}
+    <dialog ref={dialog} class="picker" aria-label="Colour picker"
       onClick={(e) => { if (e.target === dialog.current) hud.pickerOpen.value = false; }}>
       <div class="sv" role="slider" tabIndex={0} aria-label="Saturation and brightness"
         aria-valuetext={`saturation ${Math.round(c.s * 100)}%, brightness ${Math.round(c.b * 100)}%`}
