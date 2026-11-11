@@ -105,6 +105,23 @@ export function rightAngle(
   out[o + 1] = y1 + d * Math.sin(ang);
 }
 
+/** Outline offsets O_i and I_i for spine point i (needs point i-1), written into edgeL / edgeR. */
+function edgesAt(a: ActiveArena, base: number, i: number): void {
+  const s = a.spine;
+  const k = 4 * (base + i);
+  const p = k - 4;
+  rightAngle(s[k], s[k + 1], s[p], s[p + 1], s[k + 2], a.edgeL, 2 * (base + i)); // O_i
+  rightAngle(s[p], s[p + 1], s[k], s[k + 1], s[k + 2], a.edgeR, 2 * (base + i)); // I_i
+}
+
+/** Recomputes every outline offset after the spine points moved (Displace). Call emitSpine afterwards. */
+export function recomputeEdges(a: ActiveArena, r: number): void {
+  const b = r * HDR_STRIDE;
+  const base = a.hdr[b + H.SPINE_OFF];
+  if (base < 0) return;
+  for (let i = 1; i < a.hdr[b + H.SPINE_COUNT]; i++) edgesAt(a, base, i);
+}
+
 /** Worst case the outline needs 4 vertices per spine point (two QUADs), so the vertex region caps the spine well below SPINE_CAP. */
 export function spineFull(a: ActiveArena, r: number): boolean {
   const b = r * HDR_STRIDE;
@@ -129,11 +146,7 @@ export function spineTo(a: ActiveArena, r: number, x: number, y: number, w: numb
   s[k] = x;
   s[k + 1] = y;
   s[k + 2] = w;
-  if (n > 0) {
-    const p = k - 4;
-    rightAngle(x, y, s[p], s[p + 1], w, a.edgeL, 2 * (base + n)); // O_n
-    rightAngle(s[p], s[p + 1], x, y, w, a.edgeR, 2 * (base + n)); // I_n
-  }
+  if (n > 0) edgesAt(a, base, n);
   a.hdr[b + H.SPINE_COUNT] = n + 1;
   return true;
 }

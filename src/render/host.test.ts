@@ -6,6 +6,7 @@ import { ActiveRenderer } from './active';
 import { RenderClient } from './client';
 import type { Ctx2D } from './draw';
 import { RenderHost, type HostCanvas, type HostCtx } from './host';
+import type { Shape } from './batch';
 import type { FromWorker, ToWorker } from './protocol';
 
 function mockCtx() {
@@ -13,6 +14,7 @@ function mockCtx() {
   const rec = (n: string) => (...a: number[]) => void calls.push(`${n}(${a.join(',')})`);
   const ctx = {
     calls, fillStyle: '', strokeStyle: '', lineWidth: 0, lineCap: 'butt', lineJoin: 'miter',
+    createLinearGradient: (...a: number[]) => { calls.push(`gradient(${a.join(',')})`); return { addColorStop: (o: number, c: string) => void calls.push(`stop(${o},${c})`) } as unknown as CanvasGradient; },
     beginPath: rec('beginPath'), moveTo: rec('moveTo'), lineTo: rec('lineTo'), quadraticCurveTo: rec('quad'),
     bezierCurveTo: rec('cubic'), closePath: rec('close'), stroke: () => void calls.push('stroke'),
     fill: () => void calls.push('fill'), fillRect: rec('fillRect'), clearRect: rec('clearRect'),
@@ -214,5 +216,75 @@ describe('hover and affects over the protocol', () => {
     client.clear();
     expect(host.store!.aliveCount).toBe(0);
     expect(ctx.calls.some((c) => c.startsWith('fillRect'))).toBe(true);
+  });
+});
+
+describe('Repeat over the protocol', () => {
+  const setup = () => {
+    const r = rig({ worker: true });
+    const clones: Shape[] = [];
+    let commits = 0;
+    r.client.onRepeatClone = (s) => void clones.push(s);
+    r.client.onRepeatCommit = () => void commits++;
+    const e = new Engine(1, r.client);
+    e.select(shapes());
+    stroke(e, [[0, 0, 0], [40, 0, 8], [40, 40, 16], [0, 40, 24], [0, 1, 32]]); // a 40 x 40 loop
+    r.client.setAffect('affect.repeat', true);
+    const hover = (x: number, y: number, t: number) => { r.client.hover(x, y, t); r.client.flush(); };
+    return { ...r, clones, hover, commits: () => commits };
+  };
+
+  it('stamps the shape under the pointer, translated by how far the pointer moved since the grab', () => {
+    const { clones, hover } = setup();
+    hover(20, 20, 0);
+    expect(clones).toHaveLength(1);
+    expect(Array.from(clones[0].vtx.slice(0, 2))).toEqual([0, 0]); // first stamp lands on the source
+    hover(30, 25, 200);
+    expect(clones).toHaveLength(2);
+    expect(Array.from(clones[1].vtx.slice(0, 2))).toEqual([10, 5]); // pointer moved (10, 5)
+  });
+  it('is throttled by the gap (150 ms by default)', () => {
+    const { clones, hover } = setup();
+    hover(20, 20, 0);
+    hover(22, 20, 100);
+    hover(24, 20, 149);
+    expect(clones).toHaveLength(1);
+    hover(26, 20, 150);
+    expect(clones).toHaveLength(2);
+  });
+  it('asks the main thread to place its stamps after three hovers outside, and not again', () => {
+    const { hover, commits } = setup();
+    hover(20, 20, 0);
+    hover(500, 500, 200);
+    hover(500, 500, 400);
+    expect(commits()).toBe(0);
+    hover(500, 500, 600);
+    expect(commits()).toBe(1);
+    hover(500, 500, 800);
+    expect(commits()).toBe(1);
+  });
+  it('places on pointerdown while the pointer is over the shape, but not once it has been away', () => {
+    const { client, hover, commits } = setup();
+    hover(20, 20, 0);
+    client.event('down');
+    expect(commits()).toBe(1);
+    for (let i = 1; i <= 4; i++) hover(500, 500, i * 200); // away: 3rd hover commits, the 4th is past it
+    const afterAway = commits();
+    client.event('down');
+    expect(commits()).toBe(afterAway);
+  });
+  it('key B toggles stamping off and on', () => {
+    const { client, clones, hover } = setup();
+    client.event('key', 'KeyB');
+    hover(20, 20, 0);
+    expect(clones).toHaveLength(0);
+    client.event('key', 'KeyB');
+    hover(20, 20, 200);
+    expect(clones).toHaveLength(1);
+  });
+  it('event messages are not sent while no committed affect is on', () => {
+    const { client, sent } = rig({ worker: true });
+    client.event('down');
+    expect(sent.some((m) => m.type === 'event')).toBe(false);
   });
 });

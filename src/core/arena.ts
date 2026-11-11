@@ -44,6 +44,7 @@ export const F_FILL = 1;
 export const F_EVENODD = 2;
 export const F_PEN_SHAPE = 4;
 export const F_CLOSED = 8;
+export const F_GRADIENT = 16;
 
 export class ActiveArena {
   readonly vtx = new Float32Array(2 * MAX_VTX_PAIRS);
@@ -61,11 +62,11 @@ export class ActiveArena {
   private spineBump = 0;
   private nextId = 1;
 
-  /** Allocates a record region; returns the record index, or -1 when the arena is exhausted. */
-  alloc(withSpine = false): number {
+  /** Allocates a record region of `cap` vertex pairs (small caps for stamps and clones); returns the record index, or -1 when exhausted. */
+  alloc(withSpine = false, cap = VTX_CAP): number {
     if (
       this.records >= MAX_RECORDS ||
-      this.vtxBump + VTX_CAP > MAX_VTX_PAIRS ||
+      this.vtxBump + cap > MAX_VTX_PAIRS ||
       (withSpine && this.spineBump + SPINE_CAP > MAX_SPINE)
     )
       return -1;
@@ -74,10 +75,10 @@ export class ActiveArena {
     this.hdr.fill(0, b, b + HDR_STRIDE);
     this.hdr[b + H.ID] = this.nextId++;
     this.hdr[b + H.VTX_OFF] = this.vtxBump;
-    this.hdr[b + H.VTX_CAP] = VTX_CAP;
+    this.hdr[b + H.VTX_CAP] = cap;
     this.hdr[b + H.CMD_OFF] = this.cmdBump;
-    this.vtxBump += VTX_CAP;
-    this.cmdBump += VTX_CAP;
+    this.vtxBump += cap;
+    this.cmdBump += cap;
     if (withSpine) {
       this.hdr[b + H.SPINE_OFF] = this.spineBump;
       this.spineBump += SPINE_CAP;

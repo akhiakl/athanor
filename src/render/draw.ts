@@ -1,5 +1,5 @@
 // Command-stream -> Canvas 2D, spec 2.4. Shared by the active layer and the committed RenderCore.
-import { CLOSE, CUBIC, F_EVENODD, F_FILL, H, LINE, MOVE, QUAD } from '../core/arena';
+import { CLOSE, CUBIC, F_EVENODD, F_FILL, F_GRADIENT, H, HDR_STRIDE, LINE, MOVE, QUAD } from '../core/arena';
 import type { Shape } from './batch';
 
 type Paint = string | CanvasGradient | CanvasPattern;
@@ -11,6 +11,7 @@ export interface Ctx2D {
   lineWidth: number;
   lineCap: CanvasLineCap;
   lineJoin: CanvasLineJoin;
+  createLinearGradient(x0: number, y0: number, x1: number, y1: number): CanvasGradient;
   beginPath(): void;
   moveTo(x: number, y: number): void;
   lineTo(x: number, y: number): void;
@@ -41,10 +42,17 @@ export function rgbaToCss(rgba: number): string {
   return s;
 }
 
+/**
+ * Draws one record whose header (hdr/hdrF at record index `r`) carries colour, flags, width and gradient. Used for
+ * arena records (r = record index) and committed shapes (r = 0).
+ */
 export function drawRecord(
-  ctx: Ctx2D, rgba: number, flags: number, lineWidth: number,
+  ctx: Ctx2D, hdr: Int32Array, hdrF: Float32Array, r: number,
   cmd: Uint8Array, cmdOff: number, cmdN: number, vtx: Float32Array, vtxOff: number,
 ): void {
+  const b = r * HDR_STRIDE;
+  const rgba = hdr[b + H.RGBA];
+  const flags = hdr[b + H.FLAGS];
   ctx.beginPath();
   let v = 2 * vtxOff;
   for (let i = 0; i < cmdN; i++) {
@@ -56,12 +64,23 @@ export function drawRecord(
       case CLOSE: ctx.closePath(); break;
     }
   }
+  let paint: Paint = rgbaToCss(rgba);
+  if (flags & F_GRADIENT) {
+    const x1 = hdrF[b + H.GX1], y1 = hdrF[b + H.GY1], x2 = hdrF[b + H.GX2], y2 = hdrF[b + H.GY2];
+    // identical endpoints would paint nothing: keep the solid colour. shortcut: a CanvasGradient per record per frame (<= 64 active), no cache.
+    if (x1 !== x2 || y1 !== y2) {
+      const g = ctx.createLinearGradient(x1, y1, x2, y2);
+      g.addColorStop(0, paint as string);
+      g.addColorStop(1, rgbaToCss(hdr[b + H.GRADIENT_RGBA2]));
+      paint = g;
+    }
+  }
   if (flags & F_FILL) {
-    ctx.fillStyle = rgbaToCss(rgba);
+    ctx.fillStyle = paint;
     ctx.fill(flags & F_EVENODD ? 'evenodd' : 'nonzero');
   } else {
-    ctx.strokeStyle = rgbaToCss(rgba);
-    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = paint;
+    ctx.lineWidth = hdrF[b + H.LINE_WIDTH];
     ctx.lineCap = 'round';
     ctx.lineJoin = 'bevel'; // legacy BasicStroke(CAP_ROUND, JOIN_BEVEL)
     ctx.stroke();
@@ -69,5 +88,5 @@ export function drawRecord(
 }
 
 export function drawShape(ctx: Ctx2D, s: Shape): void {
-  drawRecord(ctx, s.hdr[H.RGBA], s.hdr[H.FLAGS], s.hdrF[H.LINE_WIDTH], s.cmd, 0, s.cmd.length, s.vtx, 0);
+  drawRecord(ctx, s.hdr, s.hdrF, 0, s.cmd, 0, s.cmd.length, s.vtx, 0);
 }

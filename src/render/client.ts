@@ -14,6 +14,9 @@ export class RenderClient implements CommitSink {
   /** Shapes handed off but not yet acked; the active renderer draws them. Rebuilt only when it changes. */
   pending: Shape[] = [];
   ready = false;
+  /** Repeat: a stamp arrived from the worker, or it asks for the held stamps to be committed. */
+  onRepeatClone: ((shape: Shape) => void) | null = null;
+  onRepeatCommit: (() => void) | null = null;
 
   private hover_ = new Float32Array(HOVER_MAX * 3);
   private hoverN = 0;
@@ -35,6 +38,8 @@ export class RenderClient implements CommitSink {
     if (m.type === 'ready') this.ready = true;
     else if (m.type === 'alive') return; // handled by the bootstrap, before the canvas is transferred
     else if (m.type === 'error') console.error(`render worker: ${m.message}`);
+    else if (m.type === 'repeatClone') for (const s of unpackBatch(m.buffer)) this.onRepeatClone?.(s);
+    else if (m.type === 'repeatCommit') this.onRepeatCommit?.();
     else if (m.type === 'commitAck' && this.inflight.delete(m.batchId)) {
       this.pending = [...this.inflight.values()].flat();
       this.onChange();
@@ -84,6 +89,11 @@ export class RenderClient implements CommitSink {
 
   isAffectOn(id: string): boolean {
     return this.affectsOn.has(id);
+  }
+
+  /** Pointer or key event for the committed affects that react to it. */
+  event(name: 'down' | 'key', code?: string): void {
+    if (this.affectsOn.size > 0) this.send({ type: 'event', name, code });
   }
 
   resize(w: number, h: number, dpr: number): void {
