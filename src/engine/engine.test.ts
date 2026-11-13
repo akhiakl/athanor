@@ -146,9 +146,9 @@ describe('engine plumbing', () => {
     expect(sink.commits).toHaveLength(1);
     close4(sink.commits[0].vtx, [0, 0, 30, 0]);
   });
-  it('registry lists the five create modules in spec order', () => {
+  it('registry lists the create modules in spec order', () => {
     expect(createModules.map((m) => m.id)).toEqual([
-      'create.shapes', 'create.speedShapes', 'create.detachShapes', 'create.pressureShapes', 'create.scrawlShapes',
+      'create.shapes', 'create.micShapes', 'create.speedShapes', 'create.detachShapes', 'create.pitchShapes', 'create.pressureShapes', 'create.scrawlShapes',
     ]);
     for (const d of createModules) expect(d.make().id).toBe(d.id);
   });

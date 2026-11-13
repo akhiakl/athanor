@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'preact/hooks';
 import { affectMenu, colorRgba, createMenu, type App } from '../app/app';
 import { moduleUi, type ControlSpec } from '../app/controls';
+import { mic, MIC_MESSAGE } from '../audio/mic';
 import type { Hud } from './hud';
 import { ColorPicker } from './ColorPicker';
 import { ExportDialog } from './ExportDialog';
@@ -148,6 +149,9 @@ export function SubBar({ app }: { app: App }) {
       {shown.map((id) => (
         <section key={id} aria-label={moduleUi[id].title}>
           <h2>{moduleUi[id].title}</h2>
+          {(id === 'create.micShapes' || id === 'create.pitchShapes') && MIC_MESSAGE[mic.state.value] && (
+            <span role="status" class="mic-note">{MIC_MESSAGE[mic.state.value]}</span>
+          )}
           {moduleUi[id].controls.map((s) => <Control key={s.param} spec={s} id={id} app={app} />)}
           {moduleUi[id].buttons?.map((b) => (
             <button key={b.action} type="button" aria-pressed={b.action === 'mirror.move' ? app.axisMove.value : undefined} onClick={() => app.press(b.action)}>

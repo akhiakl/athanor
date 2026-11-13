@@ -30,6 +30,11 @@ const toggle = (param: string, label: string, def: boolean): ControlSpec => ({ p
 export const moduleUi: Record<string, ModuleUi> = {
   'create.shapes': { id: 'create.shapes', title: 'Shapes', controls: [] },
   'create.speedShapes': { id: 'create.speedShapes', title: 'Speed', controls: [toggle('freeform', 'Curves', true), slider('multiplier', 'Speed', 0, 35, 15)] },
+  'create.micShapes': { id: 'create.micShapes', title: 'Mic', controls: [toggle('shake', 'Shake', false), slider('volume', 'Volume', 0, 100, 50)] },
+  'create.pitchShapes': {
+    id: 'create.pitchShapes', title: 'Pitch',
+    controls: [slider('minPitch', 'Lower pitch', 50, 1800, 50), slider('maxPitch', 'Upper pitch', 50, 1800, 1800), slider('gate', 'Gate dB', -90, -20, -50)],
+  },
   'create.detachShapes': { id: 'create.detachShapes', title: 'Detach', controls: [slider('distance', 'Distance', 0, 300, 100)] },
   'create.pressureShapes': { id: 'create.pressureShapes', title: 'Pressure', controls: [stepper('amount', 'Pressure', 1, 200, 25)] },
   'create.scrawlShapes': {

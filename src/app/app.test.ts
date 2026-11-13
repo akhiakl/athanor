@@ -186,7 +186,7 @@ describe('app controller', () => {
   it('selects create modules and toggles active and committed affects', () => {
     const { e, app, sent } = setup();
     app.run({ t: 'create', i: 1 });
-    expect(app.createId.value).toBe('create.speedShapes');
+    expect(app.createId.value).toBe('create.micShapes');
     app.run({ t: 'affect', i: affectMenu.indexOf('affect.mirror') });
     expect(e.hasAffect('affect.mirror')).toBe(true);
     app.run({ t: 'affect', i: affectMenu.indexOf('affect.random') });
