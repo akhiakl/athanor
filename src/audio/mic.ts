@@ -106,6 +106,7 @@ export class Mic implements AudioSource {
       if (gen === this.gen) this.state.value = document.hidden ? 'suspended' : 'running';
     } catch (err) {
       if (gen !== this.gen) return;
+      this.stopTracks(); // setup failed after getUserMedia: free the OS mic indicator and drop the listener
       const name = (err as DOMException | undefined)?.name;
       this.state.value = name === 'NotAllowedError' || name === 'SecurityError' ? 'denied' : name === 'NotFoundError' ? 'nodevice' : 'error';
     }

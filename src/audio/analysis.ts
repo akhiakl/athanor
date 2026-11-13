@@ -68,7 +68,7 @@ export function estimatePitch(db: Float32Array, sampleRate: number, fftSize: num
     const a = db[b - 1];
     const c = db[b + 1];
     const den = a - 2 * bb + c;
-    const delta = den === 0 ? 0 : (0.5 * (a - c)) / den;
+    const delta = den === 0 || !Number.isFinite(den) ? 0 : (0.5 * (a - c)) / den;
     peakPow[slot] = p;
     peakFreq[slot] = ((b + delta) * sampleRate) / fftSize;
   }

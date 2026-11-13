@@ -51,6 +51,14 @@ describe('estimatePitch (spec 4.1.4)', () => {
     expect(p).toBeGreaterThan(550);
     expect(p).toBeLessThan(650);
   });
+  it('keeps a peak whose neighbours are -Infinity (silent bins)', () => {
+    const db = new Float32Array(FFT / 2).fill(-Infinity);
+    const b = Math.round((440 * FFT) / SR);
+    db[b] = -20;
+    const p = estimatePitch(db, SR, FFT, -50);
+    expect(Number.isFinite(p)).toBe(true);
+    expect(Math.abs(p - 440)).toBeLessThan(25);
+  });
   it('gates quiet input', () => {
     expect(estimatePitch(spectrum([[440, -60]]), SR, FFT, -50)).toBe(0);
     expect(estimatePitch(new Float32Array(FFT / 2).fill(-100), SR, FFT, -50)).toBe(0);
