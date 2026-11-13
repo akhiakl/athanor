@@ -6,6 +6,8 @@ import { displace } from './affect/displace';
 import { gradient } from './affect/gradient';
 import { mirror } from './affect/mirror';
 import { detachShapes } from './create/detach';
+import { micShapes } from './create/micShapes';
+import { pitchShapes } from './create/pitchShapes';
 import { pressureShapes } from './create/pressure';
 import { scrawlShapes } from './create/scrawl';
 import { shapes } from './create/shapes';
@@ -20,10 +22,12 @@ export interface ModuleDescriptor {
 
 export const createModules: readonly ModuleDescriptor[] = [
   { id: 'create.shapes', kind: 'create', order: 0, make: shapes },
+  { id: 'create.micShapes', kind: 'create', order: 1, make: micShapes },
   { id: 'create.speedShapes', kind: 'create', order: 2, make: speedShapes },
   { id: 'create.detachShapes', kind: 'create', order: 101, make: detachShapes },
-  { id: 'create.pressureShapes', kind: 'create', order: 102, make: pressureShapes },
-  { id: 'create.scrawlShapes', kind: 'create', order: 103, make: scrawlShapes },
+  { id: 'create.pitchShapes', kind: 'create', order: 102, make: pitchShapes },
+  { id: 'create.pressureShapes', kind: 'create', order: 103, make: pressureShapes },
+  { id: 'create.scrawlShapes', kind: 'create', order: 104, make: scrawlShapes },
 ];
 
 export interface AffectDescriptor {
